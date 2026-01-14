@@ -1,0 +1,1607 @@
+------------------------------------------------------------------------
+
+---
+title: "manuscript_full"
+header-includes:
+ - \usepackage{mathtools,amssymb,amsmath,amsthm}
+ - \newtheorem{assumption}{Assumption}
+output:
+  html_document: default
+  pdf_document: default
+editor: visual
+params:
+  show: no
+date: "2024-06-03"
+---
+
+```{r setup, include = FALSE, echo = FALSE, warning = FALSE, message = FALSE, dev = "CairoPNG"}
+
+options(tinytex.verbose = TRUE)
+knitr::opts_chunk$set(
+	echo = FALSE,
+	fig.topcaption = FALSE,
+	message = FALSE,
+	dev = "CairoPNG",
+	dpi = 600,
+	results = "hide"
+)
+  # adjust zoom here
+  # screenshot.opts = list(zoom = 5))
+
+# loadin libraries
+library(rPCR)
+library(qpcR)
+library(ggplot2)
+library(ggbreak)
+library(ggpubr)
+library(ggsci)
+library(dplyr)
+library(reshape2)
+library(RColorBrewer)
+library(ggh4x)
+library(cowplot)
+library(latex2exp)
+library(grid)
+library(ggthemes)
+library(viridis)
+library(devEMF)
+library(lemon)
+suppressPackageStartupMessages(library(purrr))
+ppath <- "/scicore/home/sinnreic/kinter/Rprojects/rPCR/"
+tag <- format(Sys.time(), "%d%m%Y_%H%M%S")
+tag <- "test"
+
+fpath <- paste0(ppath,"documents/figures/",tag,"/")
+
+calibrationFile <- "documents/extdata/20191120AS calibration.xlsx"
+
+
+# importing data
+import <- rpcr_wrap(rpcr_readTF(paste0(ppath,calibrationFile)))
+import <- import[!import$sample == "neg. ctrl", ]
+import <- rpcr_calibDetect(import,qual="")
+
+# variable definiton
+genelist <- c("NUMA1","SYNE1","KIF13A")
+datalist <- c("F","bF")
+modellist <- c("linear","single")
+import <- rpcr_calibDetect(import, qual="")
+# import$sample <- factor(import$sample)
+ import$USI <- import$Fincl/(import$Fincl+import$Fexcl)
+ import$bUSI <- import$bFincl/(import$bFincl+import$bFexcl)
+
+# List of standards used for the calibration curve
+psiCal <- c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1)
+tPSI <- rep(psiCal, each = 3)
+
+
+
+rpcr_col_target <- pal_npg("nrc")(10)[-c(1,3)]
+rpcr_col_probe <- c(rgb(199, 235, 211, maxColorValue = 255),rgb(255, 255, 190, maxColorValue = 255),rgb(255, 190, 190, maxColorValue = 255))
+rpcr_col_probe <- c("#E64B35FF",rgb(255, 255, 100, maxColorValue = 255),"#00A087FF")
+rpcr_col_sample <- colorRampPalette(c("grey90", "grey30"))  
+
+colplot = TRUE
+
+
+if (!exists("figures")) figures <- list()
+if (!exists("res")) res <- list()
+
+
+standardSettings <- data.frame(signal = "Rn",
+                               tres = "0:0",
+                               rtype = "dynamic:dynamic",
+                               roff = "0:0",
+                               model = "linear",
+                               method = "incl:total",
+                               calib = "1:0:0:1",
+                               average = TRUE,
+                               offset=1,
+                               derivative = FALSE,
+                               baseline = FALSE)
+
+psave <- function(filename, plot, device="pdf",path=fpath,units="cm",dpi=300, ...)
+  ggsave(filename=paste0(filename,".",device),plot=plot,device=device, path=path,units=units,dpi=dpi, ...)
+
+```
+
+```{r}
+
+# does not work
+```
+
+```{r}
+# {r Figure_1, fig.width = 14, fig.height = 10, fig.dpi = 600}
+
+
+analysis <- "Overview PCR"
+
+colplot <- TRUE
+target_color <- rpcr_col_target[1:3]
+iso_color <- if (colplot) rpcr_col_probe[c(1, 3)] else rev(rpcr_col_sample(2))
+
+
+
+plots <- rpcr_plotCalibSummary(import, colplot = colplot, color_probe = rpcr_col_probe)
+
+
+df <- melt(import,
+           value_name="value",
+           measure.vars =c("Fincl","Fexcl","bFincl","bFexcl"),
+           id = c("cycle","target","sample","well"))
+df <- df[df$sample %in% c("0", "100"), ]
+
+strip <-  strip_themed(background_y = if (colplot) elem_list_rect(fill = target_color) else element_blank(),background_x = element_blank())
+
+relabel <- as_labeller(c("bFincl" = "inclusion", "bFexcl" = "exclusion","0" = "0%", "100" = "100%.","KIF13A" = "KIF13A","NUMA1" = "NUMA1","SYNE1" = "SYNE1","template" = "template isoform","cross"="cross-\nreactive","correct"="correct\nisoform"))
+
+
+df$info <- "template"
+df <- df[df$cycle==45&df$variable %in% c("bFincl","bFexcl"),]
+df$cat <- FALSE
+df[df$sample==0,]$cat <- df[df$sample==0,]$variable=="bFexcl"
+df[df$sample==100,]$cat <- df[df$sample==100,]$variable=="bFincl"
+
+df$cat <- c("correct","cross")[2-1*df$cat]
+
+p3 <- ggplot() + stat_summary(data=df,aes(x=sample,y=value,group=variable), fun = mean, position="dodge",geom="col", size=0.5,lty=1,col="black",fill=rep(iso_color,6),width = 0.7) + # ,fill=rep(iso_color,6)) +
+   # scale_fill_manual(values=iso_color) + 
+  stat_summary(data=df,aes(x=sample,y=value),fun.data = mean_se, geom = "errorbar", 
+     width = 0.5, size = 0.5, col = "black") + 
+  scale_y_continuous(breaks = c(0,5,10),labels = scales::number_format(accuracy = 1)) +
+  facet_grid2(target ~ cat,strip=strip,labeller = relabel,scales="free_x", independent = "x") +
+  theme_rpcr()  +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme( axis.text.y=element_text(size = 10),panel.spacing = unit(1, "lines"),strip.text.y = element_blank(),strip.text.x=element_text(size = 10,face = "plain")) +
+  scale_x_discrete(labels=c("0%", "100%")) +
+  labs(x ="PSI of samples \n ", y = "Flourescence signal [deltaRn]")+
+            theme(axis.text = element_text(size = 8),axis.title = element_text(face="plain"),axis.text.y = element_text(face="plain"))
+
+  
+
+
+figures[[analysis]]$A <- ggarrange(plots[[1]][[3]],
+                plots[[1]][[4]] + 
+                theme(strip.background.y = element_blank(),strip.text.y = element_blank()) + 
+                labs(title = " ",x ="Fluorescence signal [deltaRn]\n(inclusion probe)", y = "Fluorescence signal [deltaRn]\n(exclusion probe)"),
+                p3, ncol = 3, nrow = 1,labels = c("A","B","C"),common.legend = TRUE, legend="bottom", widths = c(4, 2,2))
+
+figures[[analysis]]$B <- ggarrange(plots[[2]][[3]],
+                plots[[2]][[4]]+ 
+                theme(strip.background.y = element_blank(),strip.text.y = element_blank()) + 
+                labs(title = " ",x ="Fluorescence signal [deltaRn]\n(inclusion probe)", y = "Fluorescence signal [deltaRn]\n(exclusion probe)"),
+                p3, ncol = 3, nrow = 1,labels = c("A","B","C"),common.legend = TRUE, legend="bottom",widths = c(4, 2,2))
+
+
+
+figures[[analysis]]
+
+ppp1 <- rpcr_plotCalibSummary(import, colplot = FALSE, color_probe = rpcr_col_probe)[[2]][[1]]
+ppp2 <- rpcr_plotCalibSummary(import, colplot = FALSE, color_probe = rpcr_col_probe)[[1]][[1]]
+
+ggsave(paste0(fpath,"Cross1.png"), p3,width=4, dpi=300,units="cm")
+ggsave(paste0(fpath,"Figure2_panelc.png"),plots[[2]][[3]],width=6,height=6,dpi=300,units="cm")
+ggsave(paste0(fpath,"Figure2_paneld.png"),ppp1,width=8,height=6,dpi=300,units="cm")
+ggsave(paste0(fpath,"Figure2_panele.png"),ppp2,width=8,height=6,dpi=300,units="cm")
+ggsave(paste0(fpath,"Figure1_A.pdf"),figures[[1]]$A,width=8,height=6,dpi=300,units="cm")
+psave("Cross1",p3)
+psave("Figure2_panelc",plots[[2]][[3]])
+psave("Figure2_paneld",ppp1)
+psave("Figure2_panele.png",ppp2)
+psave("Figure1E",plots[[1]][[5]] + ylim(-0.2,1.2) + xlim(15,45) + theme(legend.position="none"),device="png",dpi=300,width=16,height=12)
+# psave("Figure1_Aa",figures[[1]]$A,dpi=600)
+# psave("Figure1_Ab",figures[[1]]$A,dpi=300)
+# psave("Figure1_Ac",figures[[1]]$A,dpi=600,width=2)
+# psave("Figure1_Ad",figures[[1]]$A,dpi=600,width=4)
+# psave("Figure1_Ae",figures[[1]]$A,dpi=600,width=8)
+# psave("Figure1_Af",figures[[1]]$A,dpi=600,width=8,height=6)
+# psave("Figure1_Aa",figures[[1]]$A,dpi=300,width=16,height=12)
+# psave("Figure1_Ab",figures[[1]]$A+theme_plot(),dpi=300,width=16,height=12)
+# psave("Figure1_Ah",figures[[1]]$A,dpi=300,width=32,height=24)
+# psave("Figure1_Ai",figures[[1]]$A,dpi=600,width=32,height=24)
+
+
+```
+
+```{nr Figure_Gibbs}
+
+colplot= FALSE
+single <- TRUE
+analysis <- "Gibbs"
+Gibbs <- read.delim("/scicore/home/sinnreic/kinter/R projects/rPCR/documents/extdata/Gibbs energy probe.txt")
+
+exclude <- c(5,8,9)
+if (single) {
+Gibbs <- Gibbs[!Gibbs$Probe.ID %in% exclude,]
+Gibbs <- Gibbs[order(Gibbs$gene),]
+}
+
+Gibbs$y <- (Gibbs$strand=="anti")*0.01
+Gibbs$y <- Gibbs$y + (Gibbs$isoform=="exclusion")*0.03
+Gibbs$y <- (1 - Gibbs$y) 
+
+Gibbs$x <- if (single) rep(c(1,2,4.5,5.5,8,9),each=4) else  rep(c(1,2,3.5,4.5,5.25,6.75,7.75,8.5,9.25),each=4)
+
+dpi = 75
+psize = dpi/75
+figures[[analysis]] <-if (colplot) ggplot(Gibbs, aes(x=x, y=y, size=-dG,color= gene , alpha=-dG)) else ggplot(Gibbs, aes(x=x, y=y, size=-dG*psize)) # , alpha=-dG)) 
+figures[[analysis]] <- figures[[analysis]] +
+  geom_point() + theme_rpcr() + 
+if (colplot) figures[[analysis]] <- figures[[analysis]] +    scale_colour_manual(values = rpcr_col_target[1:3])+
+  # scale_fill_distiller(type = "seq",
+  #                       direction = 1,
+  #                       palette = "Greys",guide = "none") + 
+  # scale_color_discrete(values = rpcr_col_target[1:3], guide = "none") +
+  scale_y_continuous(limits = c(0, 5))  +  theme_void()+
+    theme(legend.position="bottom")+ 
+    scale_size_continuous(range = c(0,10))
+
+figures[[analysis]] <- figures[[analysis]] +
+theme(axis.line=element_blank(),
+      axis.text.x=element_blank(),
+      axis.text.y=element_blank(),
+      axis.ticks=element_blank(),
+      axis.title.x=element_blank(),
+      axis.title.y=element_blank(),
+      panel.background=element_blank(),
+      panel.border=element_blank(),
+      panel.grid.major=element_blank(),
+      panel.grid.minor=element_blank(),
+      plot.background=element_blank())
+
+
+rpcr_palette <- pal_npg("nrc",alpha=1)
+
+figures[[analysis]]
+
+ggsave(paste0(fpath,analysis,".png"), figures[[analysis]],width=4, dpi=300)
+
+```
+
+```{r}
+
+
+df <- melt(import,
+           value_name="value",
+           measure.vars =c("Fincl","Fexcl","bFincl","bFexcl"),
+           id = c("cycle","target","sample","well"))
+
+df <- df[df$sample %in% c("0", "100"), ]
+
+df$info <- "template"
+a <- "Fincl"
+b <- "Fexcl"
+df <- df[df$variable %in% c(a,b),]
+df$cat <- FALSE
+df[df$sample==0,]$cat <- df[df$sample==0,]$variable==b
+df[df$sample==100,]$cat <- df[df$sample==100,]$variable==a
+
+df$cat <- c("correct","cross")[2-1*df$cat]
+
+
+plot <- ggplot(data=df,aes(x=cycle,y=value,group=interaction(well,variable),col=cat)) + geom_line() + facet_grid2(target~sample,axes = "all")
+plot <- plot + theme(axis.line=element_line(colour = "black", linewidth = 1),
+                    strip.background = element_blank(),
+                     axis.title.x=element_blank(),
+                     axis.title.y=element_blank(),
+                    panel.background=element_blank(),
+      panel.grid.major=element_blank(),
+      panel.grid.minor=element_blank()) +
+  scale_colour_manual(values=c("black","red"))
+
+plot1 <- plot
+
+plot <- ggplot(data=df,aes(x=cycle,y=value,group=interaction(well,variable),col=variable)) + geom_line() + facet_grid2(target~sample,axes = "all")
+plot <- plot + theme(axis.line=element_line(colour = "black", linewidth = 1),
+                    strip.background = element_blank(),
+                     axis.title.x=element_blank(),
+                     axis.title.y=element_blank(),
+                    panel.background=element_blank(),
+      panel.grid.major=element_blank(),
+      panel.grid.minor=element_blank()) +
+  scale_colour_manual(values=c(rpcr_col_probe[1],rpcr_col_probe[3]))
+
+ggsave(paste0(fpath,"Cross2.png"), plot, width=6,height=6, dpi=300)
+if (exists("p3")) {
+  p <- ggarrange(plot,p3,common.legend = TRUE, legend="bottom",widths = c(5,2))
+}
+ggsave(paste0(fpath,"Cross3.png"), p, width=6,height=6, dpi=300)
+ggsave(paste0(fpath,"Cross2.png"), p3, width=3, height=6,dpi=300)
+
+```
+
+```{r}
+
+analysis <- "PCR data collection"
+
+# rpcr_plotCalibSummary(import)
+figures[[analysis]] <- rpcr_plotCalibSummary(import,colplot=TRUE)
+figures[[analysis]]
+
+
+
+
+
+```
+
+```{r mergely2, fig.width = 14, fig.height = 20, fig.dpi = 600}
+#### rel cycle 0
+
+analysis <- "Calib overview"
+
+plots <- rpcr_plotCalibSummary(import,
+                              type="all",
+                              colplot = colplot,
+                              color_target = rpcr_col_target,
+                              color_sample = rpcr_col_sample)
+
+
+p1 <- rpcr_plotCalib(data=import,
+                    qual = "",
+                    calibrate = FALSE,
+                    model = "single",
+                    rtype = "ip",
+                    confidence = FALSE,
+                    error = FALSE,
+                    smooth = FALSE,
+                    limit = c(NA,NA),
+                    ratio = 1,
+                    colplot = colplot,
+                    color_target = rpcr_col_target,
+                    color_sample = rpcr_col_sample)
+
+p2 <- rpcr_plotCalib(import,
+                    qual = "",
+                    calibrate = FALSE,
+                    model = "single",
+                    rtype = "ip",
+                    confidence = FALSE,
+                    error = FALSE,
+                    smooth = FALSE,
+                    limit = c(NA,NA),
+                    ratio = 1,
+                    signal = "bF",
+                    colplot = colplot,
+                    color_target = rpcr_col_target,
+                    color_sample = rpcr_col_sample)                    
+
+part1 <- ggarrange(plots[[1]][[1]],
+                   plots[[2]][[1]],
+                   plots[[3]],
+                   plots[[4]],
+                   ncol = 2,
+                   nrow = 2,
+                   labels = c("A","B","C","D"),
+                   legend ="bottom",
+                   common.legend=TRUE) # ,hjust = 2)
+
+ part2 <- ggarrange(p1[[3]],
+                    p2[[3]],
+                    ncol = 2,
+                    labels = c("E","F"),
+                    legend ="bottom",
+                    common.legend=TRUE) # ,hjust = 5)
+ 
+figures[[analysis]]$A <-  ggarrange(part1,
+                      part2,
+                      ncol = 1,
+                      nrow = 2,
+                      heights = c(2,1),
+                      legend ="bottom",
+                      common.legend = TRUE)
+ 
+ example1 <- rpcr_fit(import[import$well == "E7", c("Fincl", "Fexcl")],
+                    model = "single",
+                    rtype = "ip",
+                    plot = TRUE,
+                    aslist = TRUE,
+                    line = TRUE)$plot
+ 
+ example2 <- rpcr_fit(import[import$well == "E7", c("bFincl", "bFexcl")],
+                    model = "single",
+                    rtype = "ip",
+                    plot = TRUE,
+                    aslist = TRUE,
+                    line = TRUE)$plot
+
+ part3 <- ggarrange(example1[[1]],example1[[2]],example2[[1]],example1[[2]],
+                      ncol = 4,
+                      nrow = 1,
+                      legend ="bottom",
+                      common.legend = TRUE)
+ 
+ 
+figures[[analysis]]$B <-  ggarrange(part3,
+                      part1,
+                      ncol = 1,
+                      nrow = 2,
+                      heights = c(2,5),
+                      legend ="bottom",
+                      common.legend = TRUE)
+ 
+ 
+ 
+ 
+figures[[analysis]]$A
+figures[[analysis]]$B
+ 
+```
+
+```{r}
+analysis <- "Calibration I"
+# import <- import[order(import$target),]
+settings <- list(qual="",
+                 model = "single",
+                 rtype = "ip",
+                 confidence = FALSE,
+                 error = FALSE,
+                 smooth = FALSE,
+                 limit = c(-1,1),
+                 ratio = 1,
+                 colplot = colplot,
+                 color_target = rpcr_col_target,
+                 color_sample = rpcr_col_sample)
+
+# df0 <- do.call(rpcr_calibrate,c(list(data=import,details=TRUE),settings))$summary
+
+p1 <- do.call(rpcr_plotCalib,c(list(import,calib = TRUE),settings)) 
+p2 <- do.call(rpcr_plotCalib,c(list(import, var="cPSI"),settings)) 
+p3 <- do.call(rpcr_plotCalib,c(list(import, calib = TRUE, signal = "deltaRn"),settings))
+p4 <- do.call(rpcr_plotCalib,c(list(import, var = "cPSI", signal = "deltaRn"),settings)) 
+
+figures[[analysis]] <-  ggarrange(p1[[3]],p2[[3]],p3[[3]],p4[[3]],
+                      ncol = 4,
+                      nrow = 1,
+                      legend ="bottom",
+                      common.legend = TRUE)
+figures[[analysis]]
+
+```
+
+```{r}
+
+targets <- unique(import$target)
+datatypes <- c("Rn","deltaRn")
+derivatives <- c("0D","1D")
+crange <- c(-10:15)
+calibrations <-  c("USI","cPSI")
+
+details <- setNames(lapply(datatypes, function(datatype)
+             setNames(lapply(derivatives, function(derivative)
+               setNames(lapply(crange,function(cycle) 
+                 rpcr_calibrate(import,
+                               qual = "",
+                               output = "details",
+                               signal = datatype,
+                               derivative = if(derivative=="1D") TRUE else FALSE,
+                               rtype = "ip", # method to define range
+                               roff = c(cycle,cycle), # offset from range defined by rtype
+                               model = "single" # fitting method: either linear or 2nd degree polynomial (poly)
+                   )
+                 ), paste("c ",crange))
+             ), derivatives)
+               ), datatypes)
+
+
+results_data <-   do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+                    do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+                      do.call(rbind.data.frame, lapply(crange,function(cycle) 
+                        cbind(datatype = datatype,
+                              derivative = derivative,
+                              cycle = cycle,
+                              details[[datatype]][[derivative]][[paste("c ",cycle)]]$summary
+                        )
+                        
+                    ))
+                    ))
+                    ))
+
+
+
+
+results_qc <- do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+                do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+                  do.call(rbind.data.frame, lapply(crange,function(cycle) 
+                    cbind(datatype = datatype,
+                       cycle = cycle,
+                       derivative = derivative,
+                       details[[datatype]][[derivative]][[paste("c ",cycle)]]$calib$summary$qc,
+                       details[[datatype]][[derivative]][[paste("c ",cycle)]]$calib$summary$calib[,-1]
+                    )
+               ))
+             ))
+))
+```
+
+```{r}
+
+
+df <- melt(results_data,id.vars=c("datatype","derivative","cycle","well","sample","target","tPSI"), measure.vars=c("USI","cPSI","delta"))
+df <- df[!(df$datatype=="deltaRn" & df$derivative == "1D"),]
+df <- df[order(df$datatype,decreasing=TRUE),]
+
+
+ppp1 <- ggplot() + theme_rpcr() + geom_hline(yintercept = unique(df$tPSI), colour="grey50", linetype = "longdash") + 
+                     geom_jitter(data = df[!(df$variable=="delta"),], aes(x = cycle, y = value, fill = tPSI), shape=21, col = "grey50",alpha=0.7, size = 1,width=0.2,height=0) +
+                     scale_fill_gradientn(colours = rpcr_col_probe) +
+                     # paste(calibration,"using",datatype), title = target)  +
+                      scale_y_continuous(breaks=unique(df$tPSI),limits=c(-0.1,1.1)) +
+       facet_grid2( target ~ derivative + factor(datatype,c("Rn","deltaRn")) + variable ,
+                            axes = "x") 
+# theme(strip.background = element_blank(), strip.text = element_blank())
+                           # strip = strip_themed(background = element_blank())
+
+
+ppp1b <-ggplot() + theme_rpcr() + geom_hline(yintercept = unique(df$tPSI), colour="grey50", linetype = "longdash") + 
+                     geom_jitter(data = df[!(df$variable=="delta"),], aes(x = cycle, y = value, fill = tPSI), shape=21, col = "grey50",alpha=0.7, size = 1,width=0.2,height=0) +
+                     scale_fill_gradientn(colours = rpcr_col_probe) +
+                     # paste(calibration,"using",datatype), title = target)  +
+                      scale_y_continuous(breaks=unique(df$tPSI),limits=c(-0.1,1.1)) +
+       facet_grid( target ~ derivative + factor(datatype,c("Rn","deltaRn")) + variable)  + theme(strip.text.x = element_blank(),strip.text.y = element_blank(),strip.background = element_blank())
+
+ppp2 <- ggplot() + theme_rpcr() +
+                     geom_jitter(data = df[df$variable=="delta",], aes(x = cycle, y = value, fill = tPSI), shape=21, col = "grey50",alpha=0.7, size = 1,width=0.2,height=0) +
+                     scale_fill_gradientn(colours = rpcr_col_probe) +
+                     # paste(calibration,"using",datatype), title = target)  +
+                      scale_y_continuous(limits=c(-0.1,0.1)) +
+       facet_grid2(derivative + factor(datatype,c("Rn","deltaRn"))  ~ target + variable,
+                            switch = "y",
+                            axes = "x") 
+# theme(strip.background = element_blank(), strip.text = element_blank())
+                           # strip = strip_themed(background = element_blank())
+
+
+
+
+df <- results_data
+
+plots <- setNames(lapply(datatypes,function(datatype)
+              setNames(lapply(derivatives,function(derivative)
+                 setNames(lapply(targets, function(target)
+                 setNames(lapply(calibrations,function(calibration) {
+                  ggplot() + theme_rpcr() + geom_hline(yintercept = unique(df$tPSI), colour="grey30", linetype = "longdash") + 
+                     geom_jitter(data = df[df$datatype == datatype & df$target== target & df$ derivative== derivative , ], aes(x = cycle, y = get(calibration), fill = tPSI), shape=21, col = "grey30",alpha=0.7, size = 1,width=0.2,height=0) +
+                     scale_fill_gradientn(colours = rpcr_col_probe) +
+                     labs(y = "",title= if(calibration=="USI") "uncalibrated" else "calibrated") +
+                     # paste(calibration,"using",datatype), title = target)  +
+                      scale_y_continuous(breaks=unique(df$tPSI),limits=c(-0.1,1.1))
+                 }), calibrations)
+                 ), targets)
+               ), datatypes)
+ ), derivatives)
+
+
+plots1 <- setNames(lapply(datatypes,function(datatype)
+              setNames(lapply(derivatives,function(derivative)
+                 setNames(lapply(targets, function(target) {
+                  ggplot() + theme_rpcr() + 
+                     geom_jitter(data = df[df$datatype == datatype & df$target== target & df$ derivative== derivative , ], aes(x = cycle, y = delta, fill = tPSI), shape=21, col = "grey30",alpha=0.7, size = 1,width=0.2,height=0) +
+                     scale_fill_gradientn(colours = rpcr_col_probe) +
+                     labs(y = "") +
+                     # paste(calibration,"using",datatype), title = target)  +
+                       scale_y_continuous(limits=c(-1,1))
+                 }), targets)
+               ), datatypes)
+ ), derivatives)
+
+plots2 <- lapply(derivatives,function(derivative)
+               lapply(datatypes,function(datatype)
+                 lapply(targets, function(target)
+                 lapply(calibrations,function(calibration) {
+                  ggplot() + theme_rpcr() + geom_hline(yintercept = unique(df$tPSI), colour="grey30", linetype = "longdash") + 
+                     geom_jitter(data = df[df$datatype == datatype & df$target== target & df$ derivative== derivative , ], aes(x = cycle, y = get(calibration), fill = tPSI), shape=21, col = "grey30",alpha=0.7, size = 1,width=0.2,height=0) +
+                     scale_fill_gradientn(colours = rpcr_col_probe) +
+                     labs(y = "",title= if(calibration=="USI") "uncalibrated" else "calibrated") +
+                     # paste(calibration,"using",datatype), title = target)  +
+                      scale_y_continuous(breaks=unique(df$tPSI),limits=c(-0.1,1.1))
+                 })
+                 )
+               )
+ )
+
+
+   
+dfx <- melt(results_qc, id.vars=c("datatype","cycle","target","derivative"),
+           measure.vars=c("RSSfit","RSEfit","RSScpsi","RSEcpsi","MSDfit","MSDcpsi","facRSE","facMSD"))
+selection <- c("MSDfit","MSDcpsi")
+df <- dfx[!(dfx$datatype=="deltaRn"&dfx$derivative=="1D")&dfx$variable %in% selection,]
+parameters <- unique(df$variable)
+plots1MSE <- setNames(lapply(parameters,function(parameter)
+                 setNames(lapply(targets, function(target) {
+                  ggplot(data = df[df$target== target&df$variable==parameter , ]) + theme_rpcr() + 
+                     geom_line(aes(x = cycle, y = value, col = interaction(datatype,derivative)), size = 1) +
+                         coord_cartesian(ylim=c(0,5)) +labs(y=paste(target,parameter))
+                   # +
+                   #   scale_fill_gradientn(colours = rpcr_col_probe) +
+                   #   labs(y) 
+                     # paste(calibration,"using",datatype), title = target)  +
+                    #   scale_y_continuous(breaks=unique(df$tPSI),limits=c(-1,1))
+                 }), targets)
+               ), parameters)
+selection <- c("RSEfit","RSEcpsi")
+df <- dfx[!(dfx$datatype=="deltaRn"&dfx$derivative=="1D")&dfx$variable %in% selection,]
+parameters <- unique(df$variable)
+plots1RSE <- setNames(lapply(parameters,function(parameter)
+                 setNames(lapply(targets, function(target) {
+                  ggplot(data = df[df$target== target&df$variable==parameter , ]) + theme_rpcr() + 
+                     geom_line(aes(x = cycle, y = value, col = interaction(datatype,derivative)), size = 1) +
+                       coord_cartesian(ylim=c(0,0.05)) + labs(y=paste(target,parameter))
+                   # +
+                   #   scale_fill_gradientn(colours = rpcr_col_probe) +
+                   #   labs(y) 
+                     # paste(calibration,"using",datatype), title = target)  +
+                    #   scale_y_continuous(breaks=unique(df$tPSI),limits=c(-1,1))
+                 }), targets)
+               ), parameters)
+
+plotMix1 <- ggarrange(plotlist=unlist(plots1MSE, recursive = FALSE),ncol=3,nrow=2)
+plotMix2 <- ggarrange(plotlist=unlist(plots1RSE, recursive = FALSE),ncol=3,nrow=2)
+plotMix3 <- ggarrange(plotlist=c(unlist(plots1MSE, recursive = FALSE),unlist(plots1RSE, recursive = FALSE)),ncol=3,nrow=4)
+plotMix4 <- ggarrange(plotlist=unlist(plots1RSE, recursive = FALSE)[4:6],ncol=3,nrow=1)
+
+
+
+
+
+finish12 <- ggarrange(plots$`0D`$Rn$KIF13A$USI,plots$`0D`$Rn$KIF13A$cPSI,plots$`0D`$Rn$NUMA1$USI,plots$`0D`$Rn$NUMA1$cPSI,plots$`0D`$Rn$SYNE1$USI,plots$`0D`$Rn$SYNE1$cPSI,
+                      plots$`0D`$deltaRn$KIF13A$USI,plots$`0D`$deltaRn$KIF13A$cPSI,plots$`0D`$deltaRn$NUMA1$USI,plots$`0D`$deltaRn$NUMA1$cPSI,plots$`0D`$deltaRn$SYNE1$USI,plots$`0D`$deltaRn$SYNE1$cPSI,
+                      plots$`1D`$Rn$KIF13A$USI,plots$`1D`$Rn$KIF13A$cPSI,plots$`1D`$Rn$NUMA1$USI,plots$`1D`$Rn$NUMA1$cPSI,plots$`1D`$Rn$SYNE1$USI,plots$`1D`$Rn$SYNE1$cPSI,
+                      ncol=6,
+                      nrow=3,
+                      legend ="bottom",
+                      common.legend = TRUE)
+
+finish13 <- ggarrange(plotlist <- do.call(c, unlist(plots2, recursive=FALSE)),
+                      ncol=6,
+                      nrow=3,
+                      legend ="bottom",
+                      common.legend = TRUE)
+
+
+
+
+
+ppp1
+ppp2
+
+plotMix3
+
+finish12
+
+
+```
+
+```{r Figure_1a, fig.width=8,fig.height=12}
+yzoom <- c(-0.05,0.05)
+xzoom <- c(-5,10)
+
+qc <- "RSEcpsi"
+results <- results_data
+res_qc1 <- results_qc
+
+results <- results[!(results$derivative=="1D"&results$datatype=="deltaRn"),]
+results_qc <- results_qc[!(results_qc$derivative=="1D"&results_qc$datatype=="deltaRn"),]
+
+
+failed <- results_qc[is.na(results_qc[[qc]]),]
+failed$failed <- as.factor(interaction(failed$datatype,failed$target,failed$derivative))
+
+results <- results_data
+
+nullplot <- ggplot() + theme_void()
+
+p1a <- rpcr_plotCalibCycle(results[results$derivative=="0D"&results$datatype=="Rn",],title="Rn") + theme_rpcr() + theme(plot.margin = unit(c(0.1,0.2,0.1,0.2), 'lines'))
+p1b <- p1a + coord_cartesian(ylim=yzoom,xlim=xzoom)+ ggtitle("") + theme(plot.margin = unit(c(0.1,0.2,0.5,0.2), 'lines'))
+
+p2a <- rpcr_plotCalibCycle(results[results$derivative=="0D"&results$datatype=="deltaRn",],title="delta Rn") + theme_rpcr() + theme(plot.margin = unit(c(0.1,0.2,0.1,0.2), 'lines'))
+p2b <- p2a + coord_cartesian(ylim=yzoom,xlim=xzoom)+ ggtitle("") + theme(plot.margin = unit(c(0.1,0.2,0.5,0.2), 'lines'))
+
+p3a <- rpcr_plotCalibCycle(results[results$derivative=="1D"&results$datatype=="Rn",],title="Rn") + theme_rpcr() + theme(plot.margin = unit(c(0.1,0.2,0.1,0.2), 'lines'))
+p3b <- p3a + coord_cartesian(ylim=yzoom,xlim=xzoom)+ ggtitle("") + theme(plot.margin = unit(c(0.1,0.2,0.5,0.2), 'lines'))
+
+p5a <-   ggplot(data=na.omit(results_qc)) +
+  geom_line(aes(x=cycle,y=get(qc), col = target, linetype = interaction(datatype,derivative)),linewidth=0.5)+
+    geom_point(aes(x=cycle,y=get(qc), col = target, shape = interaction(datatype,derivative)),size=2) + #,group=interaction(gene,datatype))) +
+    scale_shape_manual(values=c(20,21,22)) +
+    labs( y = "average delta")  + theme_rpcr() + scale_y_log10() + scale_colour_brewer(palette = "Dark2")
+
+
+
+p5b <- ggplot(failed) + geom_point(aes(x=cycle,y=failed, col = target, group = interaction(target,datatype),shape = interaction(datatype,derivative))) + # ,width=0,height=0.1) +
+        scale_shape_manual(values=c(20,21,22,23)) +
+        theme_rpcr() +
+        theme(
+        axis.text.x=element_blank(), 
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank(),
+        axis.line.x=element_blank(),
+        axis.title.x=element_blank(),
+        plot.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank()
+        ) + scale_colour_brewer(palette = "Dark2") + xlim(min(crange),max(crange))
+
+
+
+
+p4a  <- ggarrange(p1a, p1b,p2a, p2b,p3a,p3b, ncol=2, nrow=3,  legend= "none", labels=c("A","B","C","D"),align="v")
+p4b  <- ggarrange(p5b + theme(plot.margin = unit(c(0,0,0,0), 'lines')),p5a + theme(plot.margin = unit(c(0,0,0.2,0), 'lines')), ncol=1, heights = c(1,5), common.legend = TRUE, legend="bottom",align="v")
+
+p_legend_a <- as_ggplot(get_legend(p1a
+                                   + guides(colour = guide_legend(nrow = 1))
+                                   + labs(color = "tPSI")
+                                   ))
+p_legend_b1 <- as_ggplot(get_legend(p3b + guides(shape = FALSE) + theme(plot.margin = unit(c(0,0,0,0), 'lines')) ))
+p_legend_b2 <- as_ggplot(get_legend(p3b + guides(color = FALSE) + theme(plot.margin = unit(c(0,0,0,0), 'lines')) ))
+
+p4 <- ggarrange(nullplot,p4a,p_legend_a,
+                # ggarrange(nullplot, p_legend_a, nullplot, nrow = 1, widths = c(0.5,1,0.5), legend = "none"),
+                nullplot,
+                ggarrange(nullplot, nullplot, nullplot, nrow = 1, widths = c(0.5,1,0.5), legend = "none",labels=c("","E","")),
+                ggarrange(nullplot, p4b, nullplot, nrow = 1, widths = c(0.5, 1, 0.5), legend = "right"),
+                nullplot,
+                p_legend_b1,
+                p_legend_b2,
+                nrow=9, heights = c(0.1,3,0.1,0.05,0.15,1,0.05,0.1,0.1)) # ,legend="none"
+
+Figure_1 <- annotate_figure(p4, top = text_grob("Calculation with single cycle relative to inflection point",
+               color = "black", face = "bold", size = 14))
+
+
+
+
+Figure_1
+```
+
+```{r}
+
+FSYNE1 <- data.frame(import[import$target=="SYNE1",]  %>% group_by(rcycle) %>% summarise(total=mean(bFtotal)))
+Fall <- data.frame(import  %>% group_by(rcycle,target) %>% summarise(total=mean(bFtotal)))
+
+names(FSYNE1)[1] <- "cycle"
+names(Fall)[1] <- "cycle"
+
+# melt(results_qc[results_qc$target=="SYNE1",],
+#            value_name="value",
+#            measure.vars =c("a","ri","re","g"),
+#            id = c("cycle","target","sample","well"))
+
+ttt1 <- merge(results_qc[results_qc$target=="SYNE1",],FSYNE1,by="cycle")
+ttt1 <- merge(results_qc,Fall,by=c("cycle","target"))
+
+ggplot(data=ttt1) + geom_point(aes(x=total,y=a,col=target,group=interaction(target,derivative,datatype)))
+ggplot(data=ttt1[ttt1$datatype=="Rn"&ttt1$derivative=="1D",]) + geom_point(aes(x=total,y=a,col=target,group=interaction(target,derivative,datatype)))
+
+datatypes <- "deltaRn"
+
+ttt2 <- ttt1[ttt1$datatype==datatypes&ttt1$derivative=="1D",]
+ttt2 <- ttt1
+# ttt2$total <- log(ttt2$total)
+sel <- ttt2[ttt2$cycle %in% c(-2:1),]
+
+ggplot(data=ttt2) + geom_line(aes(x=total,y=a,col=interaction(target,derivative,datatype)))+ geom_point(aes(x=total,y=a,col=interaction(target,derivative,datatype))) + geom_point(data=sel,aes(x=total,y=a,group=interaction(target,derivative,datatype)),col=1) + ylim(0,5)
+
+
+
+
+```
+
+```{r}
+
+
+df <- results_data
+  
+
+df$signal <- interaction(df$datatype,df$derivative)
+df <- df[df$signal!="deltaRn.1D",]
+
+
+df$signal <- factor(df$signal, levels=c("Rn.0D","deltaRn.0D","Rn.1D"), labels=c("Rn","deltaRn","derRn")) 
+  jwidth <- unique(df[,"cycle"])
+  jwidth <- jwidth[order(jwidth)]
+  jwidth <- mean(jwidth[2:(length(jwidth))]- jwidth[1:(length(jwidth)-1)])/5
+
+
+    plot <- ggplot(data=df) +
+      # geom_rect(data = data.frame(target= unique(df[order(df$target),"target"]),x=1), aes(fill = target), col = NA, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.1) +
+
+        theme_rpcr() +  scale_colour_gradientn(colours = rpcr_col_probe)  
+
+
+  plot1 <- plot + 
+    facet_grid2(target ~ signal, switch = "y", strip = strip_themed(background_y = elem_list_rect(fill = rpcr_col_target)),axes = "x") +
+    geom_boxplot(aes(x=cycle,y=delta,group=cycle),outlier.shape = NA) +
+    geom_jitter(aes(x=cycle,y=delta, group=interaction(cycle,tPSI),col=tPSI), # col= if (colplot) as.factor(tPSI) else "black",
+                             width=jwidth,
+                             alpha=0.5,
+                             size=1) 
+  
+  
+  plot1b <- plot + 
+    facet_grid(target ~ signal) +
+        geom_boxplot(aes(x=cycle,y=delta,group=cycle),outlier.shape = NA) +
+    geom_jitter(aes(x=cycle,y=delta, group=interaction(cycle,tPSI),col=tPSI), # col= if (colplot) as.factor(tPSI) else "black",
+                             width=jwidth,
+                             alpha=0.5,
+                             size=1) +
+   theme(strip.text.x = element_blank(),strip.text.y = element_blank(),strip.background = element_blank())
+
+  
+  plot2 <- ggplot(data=df) +
+    theme_rpcr() +  scale_colour_gradientn(colours = rpcr_col_probe)  +
+    facet_grid2(target ~ signal,  axes = "all")+
+    geom_violin(aes(x=cycle,y=delta,group=cycle)) + #,fill="grey90") +
+    geom_jitter(aes(x=cycle,y=delta, group=interaction(cycle,tPSI),col=tPSI), # col= if (colplot) as.factor(tPSI) else "black",
+                             width=jwidth,
+                             alpha=0.5,
+                             size=1)+
+    coord_cartesian(ylim=yzoom,xlim=c(-1.1,7.1)) +
+    ggtitle("") + theme(plot.margin = unit(c(0.1,0.2,0.5,0.2), 'lines')) + scale_x_continuous(breaks=-1:7)
+
+
+
+
+```
+
+```{r}
+
+
+df <- results_qc
+  
+
+
+df$signal <- interaction(df$datatype,df$derivative)
+df <- df[df$signal!="deltaRn.1D",]
+df$signal <- factor(df$signal, levels=c("Rn.0D","deltaRn.0D","Rn.1D"), labels=c("Rn","deltaRn","derRn")) 
+
+
+failed <- df[is.na(df[["RSEcpsi"]]),]
+failed$failed <- as.factor(interaction(failed$datatype,failed$target,failed$derivative))
+
+qc <- "RSEcpsi"
+
+
+p5a <-   ggplot(data=na.omit(df)) +
+  geom_line(aes(x=cycle,y=get(qc), col = target, linetype = interaction(datatype,derivative)),linewidth=0.5)+
+    geom_point(aes(x=cycle,y=get(qc), col = target, shape = interaction(datatype,derivative)),size=2) + #,group=interaction(gene,datatype))) +
+    scale_shape_manual(values=c(20,21,22)) + facet_grid(target~.)+
+    labs( y = "average delta")  + theme_rpcr() + scale_y_log10() + scale_colour_brewer(palette = "Dark2")
+
+
+
+p5b <- ggplot(failed) + geom_point(aes(x=cycle,y=failed, col = target, group = interaction(target,datatype),shape = interaction(datatype,derivative))) + # ,width=0,height=0.1) +
+        scale_shape_manual(values=c(20,21,22,23)) +
+        theme_rpcr() +
+        theme(
+        axis.text.x=element_blank(), 
+        axis.ticks.x=element_blank(),
+        axis.text.y=element_blank(), 
+        axis.ticks.y=element_blank(),
+        axis.line.x=element_blank(),
+        axis.title.x=element_blank(),
+        plot.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank()
+        ) + scale_colour_brewer(palette = "Dark2") + xlim(min(crange),max(crange))
+```
+
+analyzing treshold range
+
+```{r range1, echo=FALSE}
+
+analysis <- "tres single range"
+
+df <- import
+
+datalist <- "Rn"
+range1_list <- 1
+range2_list <- seq(0,0.99,0.01)
+
+
+
+
+res[[analysis]]$details <-   setNames(lapply(datalist, function(datatype)
+               setNames(lapply(range1_list,function(range1)
+               setNames(lapply(range2_list,function(range2) {
+                 print(paste(datatype,range1,range2))
+                 rpcr_calibrate(df,
+                               qual="",
+                               output = "details",
+                               signal = datatype,
+                               tres = range2,     # treshold value to define dynamic range
+                               rtype = "dynamic", # method to define range
+                               roff = 0, # offset from range defined by rtype
+                               model = "linear" # fitting method: either linear or 2nd degree polynomial (poly)
+                   ) 
+                 }), paste0("R_",range2_list))
+               ), paste0("R_",range1_list))
+               ), datalist)
+
+
+res[[analysis]]$results_data <-   do.call(rbind.data.frame, lapply(datalist, function(datatype)
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)               
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2) 
+                        cbind(datatype = datatype,
+                              range1 = range1,
+                              range2 = range2,
+                              res[[analysis]]$details[[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$summary
+                              )
+                        ))
+                      ))
+                    ))
+
+res[[analysis]]$results_qc <-   do.call(rbind.data.frame, lapply(datalist, function(datatype)
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)               
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2) 
+                        cbind(datatype = datatype,
+                              range1 = range1,
+                              range2 = range2,
+                               res[[analysis]]$details[[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                       )
+                        ))
+                      ))
+                    ))
+             
+
+
+
+```
+
+```{r}
+analysis <- "tres single range"
+
+df <- res[[analysis]]$results_qc
+results_qc_na <- results_qc %>% replace(is.na(.), 1)
+
+var <- "RSEcpsi"
+
+top <- do.call(rbind.data.frame, lapply(genelist, function(target)
+             do.call(rbind.data.frame, lapply(datalist, function(datatype){
+               temp <- df[df$target==target&df$datatype==datatype, ]
+               temp[which.min(temp$RSEcpsi),]
+             }
+             ))
+           ))
+
+top <- merge(dcast(df, datatype + range1 + range2 ~ target,value.var=var),dcast(df, datatype + range1 + range2 ~ .,value.var=var,fun=mean))
+names(top)[names(top)=="."] <- "mean"
+top$mean <- top$mean*100
+
+print(top)
+print(top[which.min(top$mean),])
+
+figures[[analysis]] <- ggplot(df, aes(x=range2,y=get(var),col=target)) + 
+  geom_line()
+figures[[analysis]]
+
+```
+
+analyzing treshold range both sides
+
+```{r range10, echo=FALSE}
+
+analysis <- "tres double range"
+
+df <- import
+
+datalist <- "Rn"
+range1_list <- seq(0,0.99,0.05)
+range2_list <- seq(0,0.99,0.05)
+
+
+
+res[[analysis]]$details <-   setNames(lapply(datalist, function(datatype)
+               setNames(lapply(range1_list,function(range1){               
+               print(paste(datatype,range1))
+               setNames(lapply(range2_list,function(range2) {
+                 rpcr_calibrate(df,
+                               qual="",
+                               output = "details",
+                               signal = datatype,
+                               tres = c(range1,range2),     # treshold value to define dynamic range
+                               rtype = "dynamic", # method to define range
+                               roff = 0, # offset from range defined by rtype
+                               model = "linear" # fitting method: either linear or 2nd degree polynomial (poly)
+                   ) 
+                 }), paste0("R_",range2_list))}
+               ), paste0("R_",range1_list))
+               ), datalist)
+
+
+res[[analysis]]$results_data <- do.call(rbind.data.frame, lapply(datalist, function(datatype)
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)                
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2) 
+                        cbind(datatype = datatype,
+                              range1 = range1,
+                              range2 = range2,
+                              res[[analysis]]$details[[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$summary
+                              )
+                        ))
+                      ))
+                    ))
+
+res[[analysis]]$results_qc <-   do.call(rbind.data.frame, lapply(datalist, function(datatype)
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)               
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2) 
+                        cbind(datatype = datatype,
+                              range1 = range1,
+                              range2 = range2,
+                               res[[analysis]]$details[[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                       )
+                        ))
+                      ))
+                    ))
+             
+res[[analysis]]$details <- NULL
+
+
+```
+
+figures\[\[analysis\]\]
+
+```{r}
+
+analysis <- "tres double range"
+
+df <- res[[analysis]]$results_qc
+results_qc_na <- results_qc %>% replace(is.na(.), 1)
+
+var <- "RSEcpsi"
+
+top <- do.call(rbind.data.frame, lapply(genelist, function(target)
+             do.call(rbind.data.frame, lapply(datalist, function(datatype){
+               temp <- df[df$target==target&df$datatype==datatype, ]
+               temp[which.min(temp$RSEcpsi),]
+             }
+             ))
+           ))
+
+top <- merge(dcast(df, datatype + range1 + range2 ~ target,value.var=var),dcast(df, datatype + range1 + range2 ~ .,value.var=var,fun=mean))
+names(top)[names(top)=="."] <- "mean"
+top$mean <- top$mean*100
+
+print(top)
+print(top[which.min(top$mean),])
+
+
+figures[[analysis]] <- lapply(genelist, function(target){
+scaly <- quantile(df[df$target==target,var],0.1,na.rm=TRUE)
+  ggplot(df[df$target==target,], aes(range1, range2, fill= get(var))) + 
+  geom_tile() +
+  scale_fill_viridis() 
+  # scale_fill_viridis(rescaler = function(x, to = c(0, 1), from = NULL) {
+  #   ifelse(x<scaly, 
+  #          scales::rescale(x,
+  #                          to = to,
+  #                          from = c(min(x, na.rm = TRUE), scaly)),
+  #          1)}) 
+  
+})
+figures[[analysis]]
+
+```
+
+Analyzing IP range
+
+```{r range11, echo=FALSE}
+
+analysis <- "IP range"
+
+df <- import
+
+datalist <- "Rn"
+range1_list <- seq(-20,20,1)
+range2_list <- seq(-20,20,1)
+
+
+
+
+res[[analysis]]$details <-  setNames(lapply(range1_list,function(range1){               
+               print(range1)
+               setNames(lapply(range2_list,function(range2) {
+                 rpcr_calibrate(df,
+                               qual="",
+                               output = "details",
+                               rtype = "ip", # method to define range
+                               roff = c(range1,range2), # offset from range defined by rtype
+                               model = "linear" # fitting method: either linear or 2nd degree polynomial (poly)
+                   )
+                 }), paste0("R_",range2_list))}
+               ), paste0("R_",range1_list))
+               
+
+
+res[[analysis]]$results_data <- do.call(rbind.data.frame, lapply(range1_list, function(range1)                
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2) 
+                        cbind(range1 = range1,
+                              range2 = range2,
+                              res[[analysis]]$details[[paste0("R_",range1)]][[paste0("R_",range2)]]$summary
+                              )
+                        ))
+                      ))
+                    
+
+res[[analysis]]$results_qc <-   
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)               
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2) 
+                        cbind(range1 = range1,
+                              range2 = range2,
+                               res[[analysis]]$details[[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                       )
+                        ))
+                      ))
+
+
+paraQC <- "RSEcpsi"
+res[[analysis]]$results_qc2 <- 
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)               
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2)  {
+                    settings <- standardSettings
+                    settings[,c("rtype","roff")] <- c("ip:ip",paste(c(range1,range2),collapse=":"))
+                    temp <-res[[analysis]]$details[[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                    rownames(temp) <- temp$target
+                    temp2 <- data.frame(t(temp))[paraQC,]
+                    cbind(settings,mean = mean(temp[,paraQC]),temp2)  
+                    }
+               ))
+             ))
+
+
+                    
+             
+res[[analysis]]$details <- NULL
+
+
+```
+
+```{r, fig.width = 3, fig.height = 9, fig.dpi = 600}
+
+analysis <- "IP range"
+
+df <- res[[analysis]]$results_qc
+
+
+var <- "RSEcpsi"
+
+top <- do.call(rbind.data.frame, lapply(genelist, function(target)
+             do.call(rbind.data.frame, lapply(datalist, function(datatype){
+               temp <- df[df$target==target&df$datatype==datatype, ]
+               temp[which.min(temp$RSEcpsi),]
+             }
+             ))
+           ))
+
+top <- merge(dcast(df,  range1 + range2 ~ target,value.var=var),dcast(df, range1 + range2 ~ .,value.var=var,fun=mean))
+names(top)[names(top)=="."] <- "mean"
+top$mean <- top$mean*100
+
+print(top)
+print(top[which.min(top$mean),])
+scale_max <- max(df[[var]],na.rm=TRUE) 
+scale_breaks <- c(0,0.01,0.011,0.012,0.013,0.014,0.015,0.018,0.019,scale_max)
+scale_col <- rev(viridis::plasma(n = length(scale_breaks)))
+
+
+
+df <- df[df$range2>df$range1,]
+
+df2 <- df[!is.na(df[[var]]),]
+r1 <- c(min(df2$range1,df2$range2),max(df2$range1,df2$range2))
+
+figures[[analysis]] <- ggplot(df, aes(range1, range2, fill= cut(get(var), breaks = scale_breaks))) + 
+  geom_tile(col="white") +
+  scale_fill_manual(values = scale_col,na.value="grey90") + theme_rpcr() +
+   facet_grid(target~.) + coord_fixed() + ylim(r1[1],r1[2])+ xlim(r1[1],r1[2])
+
+figures[[analysis]]
+
+ggsave(paste0(fpath,analysis,".png"), figures[[analysis]],width = 3, dpi=300, units = "in")
+```
+
+Fixed cycle IP range
+
+```{r range_005, echo=FALSE}
+
+analysis <- "Fixed cycle range"
+df <- import
+
+datatypes <- c("Rn","deltaRn")
+derivatives <- c(FALSE,TRUE)
+range1_list <- seq(-20,20,1)
+range2_list <- seq(-20,20,1)
+
+start.time <- Sys.time()
+res[[analysis]]$details  <- setNames(lapply(derivatives, function(derivative)
+             setNames(lapply(datatypes, function(datatype)
+               setNames(lapply(range1_list,function(range1){
+               print(paste(derivative,datatype,range1))
+               setNames(lapply(range2_list,function(range2) {
+                 rpcr_calibrate(df,
+                               qual = "",
+                               output = "details",
+                               derivative = derivative,
+                               signal = datatype,
+                               tres = 0,     # treshold value to define dynamic range
+                               rtype = "ip", # method to define range
+                               roff = c(range1,range2), # offset from range defined by rtype
+                               method = c("incl","total"),
+                               model = "single") 
+                 }), paste0("R_",range2_list))}
+               ), paste0("R_",range1_list))
+               ), datatypes)
+             ),c("0D","1D"))
+end.time <- Sys.time()
+time.taken <- round(end.time - start.time,2)
+time.taken
+
+res[[analysis]]$results_data <- do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+             do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+                do.call(rbind.data.frame, lapply(range1_list,function(range1)               
+               do.call(rbind.data.frame, lapply(range2_list,function(range2) {
+                 cbind(derivative = derivative,
+                       model = "single",
+                       datatype = datatype,
+                       range1 = range1,
+                       range2 = range2,
+                       res[[analysis]]$details[[if (derivative) "1D" else "0D"]][[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$summary
+                 )}
+               ))
+             ))
+           ))
+))
+
+
+res[[analysis]]$results_qc <- do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+                do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+                  do.call(rbind.data.frame, lapply(range1_list,function(range1) 
+                    do.call(rbind.data.frame, lapply(range2_list,function(range2)
+                      cbind(
+                        datatype = datatype,
+                        derivative = derivative,
+                        range1 = range1,
+                        range2 = range2,
+                        res[[analysis]]$details[[if (derivative) "1D" else "0D"]][[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                      )
+                 
+               ))
+             ))
+           ))
+))
+
+
+
+res[[analysis]]$details <- NULL
+
+                   
+```
+
+```{r Figure_005, fig.width=8,fig.height=12}
+
+
+analysis <- "Fixed cycle range"
+
+df <- na.omit(res[[analysis]]$results_qc)
+
+
+var <- "RSEcpsi"
+
+top <- do.call(rbind.data.frame, lapply(genelist, function(target)
+        do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+             do.call(rbind.data.frame, lapply(datatypes, function(datatype){
+               temp <- df[df$target==target&df$datatype==datatype&df$derivative==derivative, ]
+               temp[which.min(temp$RSEcpsi),]
+             }
+             ))
+           ))
+))
+
+top <- merge(dcast(df,  range1 + range2 ~ target,value.var=var),dcast(df, range1 + range2 ~ .,value.var=var,fun=mean))
+names(top)[names(top)=="."] <- "mean"
+top$mean <- top$mean*100
+
+print(top)
+print(top[which.min(top$mean),])
+
+
+figures[[analysis]] <- lapply(genelist, function(target){
+scaly <- quantile(df[df$target==target,var],0.1,na.rm=TRUE)
+print(scaly)
+scaly <- 0.02
+
+print(scaly)
+  ggplot(df[df$target==target,], aes(range1, range2, fill= get(var))) + 
+  geom_tile() +
+   scale_fill_viridis(rescaler = function(x, to = c(0, 1), from = NULL) {
+   ifelse(x<scaly, 
+   scales::rescale(x,
+                             to = to,
+                              from = c(min(x, na.rm = TRUE), scaly)),
+             1)}) 
+  
+})
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+```{r}
+
+analysis <- "different scenarios"
+get_qc <- function(df,
+                   qual="",
+            signal="Rn",
+            tres = 0,     # treshold value to define dynamic range
+            rtype = c("full"), # method to define range
+            roff = c(0,0), # offset from range defined by rtype
+            method = c("incl","total"),
+            model = "linear",
+                   ...){
+  
+temp0 <- data.frame(signal=signal,rtype=paste(rtype,collapse=":"),roff=paste(roff,collapse=":"),tres=paste(tres,collapse=":"),method=paste(method,collapse=":"),model= model)
+temp1 <- rpcr_calibrate(df,tres=tres,rtype=rtype,roff=roff,method=method,model=model,qual=qual,output="qc",...)
+rownames(temp1) <- temp1$target
+
+temp2 <- data.frame(t(temp1))["RSEcpsi",]
+
+cbind(temp0,mean = mean(temp1$RSEcpsi),temp2)
+}
+
+
+
+res[[analysis]] <- rbind(
+  get_qc(import,rtype=c("full","full")), 
+  get_qc(import,rtype=c("full","full")),
+get_qc(import,rtype=c("ip","full")),
+get_qc(import,rtype=c("full","ip")),
+get_qc(import,rtype=c("dynamic","full")),
+get_qc(import,rtype=c("full","dynamic")),
+get_qc(import,rtype=c("dynamic","dynamic")),
+get_qc(import,rtype=c("dynamic","ip")),
+get_qc(import,rtype=c("ip","dynamic")),
+get_qc(import,rtype=c("dynamic","full"),tres=-1),
+get_qc(import,rtype=c("dynamic","full"),tres=0),
+get_qc(import,rtype=c("dynamic","full"),tres=0.05),
+get_qc(import,rtype=c("dynamic","full"),tres=0.1),
+get_qc(import,rtype=c("dynamic","full"),tres=0.15),
+get_qc(import,rtype=c("dynamic","full"),tres=0.2),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.1)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.3)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.33)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.5)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.1)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.3)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.33)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.5))
+)
+
+res[[analysis]] 
+
+```
+
+rPCR simulation with different parameter values.
+
+```{r unknown_block6}
+
+
+label_size <- 10
+title_size <- 14
+axis_size <- 12
+scale <- 1
+
+
+plot_sim <- function(sim_fun="rpcr_simpsi",para,range,log=FALSE,title=NULL,ratio=2,args = list(a=1,ri=0,re=0,g=1)) {
+    symb <- c(a="$\\alpha$",ri="$\\r_i$",re="$\\r_e$",g="$\\gamma$")
+  
+    delta <- function(x,a) {get(sim_fun)(x, a = a$a, ri = a$ri, re = a$re, g = a$g) - x}
+  
+  geom_layer <- function (x,args,para) {
+      args[para] <- x
+      geom_function(aes(color=x), fun = get(sim_fun), args = args, alpha=.7, linewidth = 0.5)
+      }
+  
+  geom_layer2 <- function (x,args,para) {
+      args[para] <- x
+      geom_function(aes(color=x), fun = delta, args= list(args), alpha=.7, linewidth = 0.5)
+      }
+  
+
+  layers <- lapply(range, geom_layer, args = args, para = para)
+  layers2 <- lapply(range, geom_layer2, args = args, para = para)
+
+  if (!is.null(title)) title <- title # TeX("$Modelling~different~probe~intensities~(alpha)$")
+  #// combine plot and layers
+print("OK0")
+  p1 <- ggplot() + xlim(0, 1) + geom_function(fun= get(sim_fun), linetype = "dotted") +
+      layers +
+      ggtitle(title) +
+      scale_color_viridis() +
+      xlab(TeX("$\\psi$")) +
+      ylab(TeX("$\\psi_a$")) +
+      labs(color = TeX(symb[para])) +
+      theme_rpcr() +
+      xlim(0, 1) + ylim(0, 1) 
+      # coord_fixed(ratio = 1, xlim = c(0, 1), ylim = c(0, 1),expand = FALSE) # , clip = "on")
+    
+  p2 <- ggplot() + xlim(0, 1) + geom_function(fun= delta, linetype = "dotted") +
+      layers2 +
+      # ggtitle(title) +
+      scale_color_viridis() +
+      xlab(TeX("$\\psi$")) +
+      ylab(TeX("$\\Delta\\psi\\ [\\psi - \\psi_a$]")) +
+      labs(color = TeX(symb[para])) +
+      theme_rpcr() +
+      scale_y_continuous(breaks=c(-0.5,0,0.5)) +
+      xlim(0, 1) + ylim(-0.5, 0.5) 
+      # coord_fixed(xlim = c(0, 1), ylim = c(-0.5, 0.5),expand = FALSE, clip = "on")
+  print("OK1")
+  if (log) {
+     sim_breaks <- c(min(range),median(range),max(range))
+      p1 <- p1 + scale_color_viridis(trans = "log", breaks = sim_breaks, labels = sim_breaks)
+      p2 <- p2 + scale_color_viridis(trans = "log", breaks = sim_breaks, labels = sim_breaks)
+  }
+    print("OK2")
+  merge_plots <- list(p1 + theme(plot.margin = unit(c(1,1,1,1), 'lines')),p2 + theme(plot.title = element_blank(),plot.margin = unit(c(1,1,1,1), 'lines')))
+  list( ggarrange(plotlist=merge_plots, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v"),p1,p2)
+}
+    
+
+range <- function(mid=1,max=4,steps=.2) c(seq(mid,max,steps),1/seq(mid,max,steps))
+plot_a <- plot_sim(sim_fun="rpcr_simpsi",para="a",log=TRUE,range=range(),title= TeX("$Modelling~parameter~alpha$"))
+plot_re <- plot_sim(sim_fun="rpcr_simpsi",para="re",range=seq(0,1,0.05),title= TeX("$Modelling~parameter~r_e$"))
+plot_ri <- plot_sim(sim_fun="rpcr_simpsi",para="ri",range=seq(0,1,0.05),title= TeX("$Modelling~parameter~r_i$"))
+plot_g <- plot_sim(sim_fun="rpcr_simpsi",para="g",range=seq(1,10,0.4),title= TeX("$Modelling~parameter~gamma$"))
+
+plot_final1 <- ggarrange(plot_a[[1]],plot_g[[1]],plot_ri[[1]],plot_re[[1]],ncol=2,nrow=2)
+plot_final2 <- ggarrange(plot_a[[2]],plot_g[[2]],plot_ri[[2]],plot_re[[2]],ncol=2,nrow=2)
+plot_final3 <- ggarrange(plot_a[[3]],plot_g[[3]],plot_ri[[3]],plot_re[[3]],ncol=2,nrow=2)
+plot_final4 <- ggarrange(plot_final2,plot_final3,nrow=2)
+plot_final5 <- ggarrange(plot_final2,plot_final3,ncol=2)
+plot_final6 <- ggarrange(plot_a[[1]],plot_g[[1]],plot_ri[[1]],plot_re[[1]],ncol=4,nrow=1)
+
+
+merge_theme <-       theme(
+  # axis.line=element_blank(),
+  # axis.text.x=element_blank(),
+  axis.text.y=element_blank(),
+  #    axis.ticks=element_blank(),
+  #    axis.title.x=element_blank(),
+      axis.title.y=element_blank())
+
+merge_theme2 <-       theme(
+  # axis.line=element_blank(),
+  axis.text.x=element_blank(),
+  #    axis.ticks=element_blank(),
+      axis.title.x=element_blank()
+   )
+
+margin_1_a <- unit(c(1,1,0,1), 'lines')
+margin_1_b <- unit(c(1,1,0,0), 'lines')
+margin_2_a <- unit(c(0,0,0,0), 'lines')
+margin_2_b <- unit(c(0,0,0,0), 'lines')
+
+merge_a <- list(
+  plot_a[[2]] + theme(plot.margin = margin_1_a) + merge_theme2,
+  plot_a[[3]] + theme(plot.title = element_blank(),plot.margin =margin_2_a) 
+  )
+merge_ri <- list(
+  plot_ri[[2]] + theme(plot.margin = margin_1_b) + merge_theme + merge_theme2 ,
+  plot_ri[[3]] + theme(plot.title = element_blank(),plot.margin = margin_2_b) + merge_theme 
+  )
+
+merge_re <- list(
+  plot_re[[2]] + theme(plot.margin = margin_1_b) + merge_theme +merge_theme2,
+  plot_re[[3]] + theme(plot.title = element_blank(),plot.margin = margin_2_b) + merge_theme
+  )
+
+merge_g <- list(
+  plot_g[[2]] + theme(plot.margin = margin_1_b) + merge_theme +merge_theme2,
+  plot_g[[3]] + theme(plot.title = element_blank(),plot.margin = margin_2_b) + merge_theme 
+  )
+ratio <- 2
+merge_a_f <- ggarrange(plotlist=merge_a, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+merge_ri_f <- ggarrange(plotlist=merge_ri, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+merge_re_f <- ggarrange(plotlist=merge_re, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+merge_g_f <- ggarrange(plotlist=merge_g, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+
+plot_final <-  ggarrange(merge_a_f,merge_ri_f,merge_re_f,merge_g_f,ncol=4,nrow=1,widths=c(1.29,1,1,1))
+
+```
+
+```{r unknown_block7, fig.width=12, fig.asp=0.435}
+
+plot_final
+```
+
+```{r unknown_block8}
+
+# rpcr_plotSim generates plots to compare theoretical (tPSI) and apparent PSI (aPSI) for multiple calibration parameter sets.
+
+plot_sim2 <- function(curves) {
+ratio <- 2
+sim_fun <- "rpcr_simpsi"
+curves <- rbind(linetype=c(rep(0.5,length(curves)-1),2),curves)
+curves <- rbind(col=2:(length(curves)+1),curves)
+ttt1 <- lapply(curves, function(x) print(list(x[2])))
+delta <- function(x,args=list(a=1,ri=0,re=0,g=1)) {get(sim_fun)(x, a = args[[1]], ri = args[[2]], re = args[[3]], g = args[[4]]) - x}
+fun_std <- function(x,args) get(sim_fun)(x, a = args[[1]], ri = args[[2]], re = args[[3]], g = args[[4]])
+
+geom_layer1 <- lapply(curves, function (args) { geom_function(fun = fun_std, args = list(args[-c(1:2)]), alpha=.7, linewidth = args[2], col = args[1])})
+geom_layer2 <- lapply(curves, function (args) { geom_function( fun = delta, args= list(args[-c(1:2)]), alpha=.7, linewidth = args[2], col = args[1])})
+
+  p1 <- ggplot() + xlim(0, 1) + geom_function(fun= get(sim_fun), linetype = "dotted") +
+      geom_layer1 +
+     scale_colour_discrete() +
+      # ggtitle(title) +
+      # scale_color_viridis() +
+      xlab(TeX("$\\psi$")) +
+      ylab(TeX("$\\psi_a$")) +
+      theme_rpcr() +
+      xlim(0, 1) + ylim(0, 1) 
+      # coord_fixed(ratio = 1, xlim = c(0, 1), ylim = c(0, 1),expand = FALSE) # , clip = "on")
+    
+  p2 <- ggplot() + xlim(0, 1) + geom_function(fun= delta, linetype = "dotted") +
+      geom_layer2 +
+      scale_colour_discrete() +
+      # ggtitle(title) +
+      xlab(TeX("$\\psi$")) +
+      ylab(TeX("$\\Delta\\psi\\ [\\psi - \\psi_a$]")) +
+      theme_rpcr() +
+      xlim(0, 1) + ylim(-0.5, 0.5) 
+      # coord_fixed(xlim = c(0, 1), ylim = c(-0.5, 0.5),expand = FALSE, clip = "on")
+  
+
+    
+  merge_plots <- list(p1 + theme(plot.margin = unit(c(1,1,1,1), 'lines')),p2 + theme(plot.title = element_blank(),plot.margin = unit(c(1,1,1,1), 'lines')))
+  ggarrange(plotlist=merge_plots, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="hv")
+}
+
+
+curves  <- data.frame(c(a=2,ri=0,re=0,g=1),c(a=1,ri=0,re=0,g=2),c(a=1,ri=0,re=0.1,g=1),c(a=2,ri=0,re=0.1,g=2))
+example_1 <- plot_sim2(curves)
+
+curves  <- data.frame(c(a=5,ri=0,re=0.0,g=1),c(a=1,ri=0.2,re=0,g=1),c(a=1,ri=0,re=0,g=4),c(a=5,ri=0.2,re=0,g=4))
+example_2 <- plot_sim2(curves)
+
+curves  <- data.frame(c(a=1/5,ri=0,re=0.0,g=1),c(a=1,ri=0.2,re=0,g=2),c(a=1,ri=0,re=0,g=4),c(a=1/5,ri=0.2,re=0,g=4))
+example_3 <- plot_sim2(curves)
+example_1
+example_2
+example_3
+```
+
+```{r SimulateSingle, fig.width=3, fig.asp=1.38}
+
+# rpcr_plotSim generates plots to compare theoretical (tPSI) and apparent PSI (aPSI) for a single calibration parameter set.
+
+p1 <- rpcr_plotSim(c(a=2,ri=0.1,re=0.2,g=2))
+p2 <- rpcr_plotSim(c(a=0.2,ri=0,re=0,g=4))
+p3 <- rpcr_plotSim(c(a=2,ri=0,re=0,g=6))
+p1
+p2
+p3
+
+```
+
+```{r okok}
+rpcr_plotSim(t(data.frame(a=c(1,2,3),ri=c(0,0.2,0.3),re=c(0,0.2,0.3),g=c(1,1.1,1.2))))
+
+```
+
+```{r}
+file1 <- paste("results",Sys.Date(),collapse="_")
+file2 <- paste("figures",Sys.Date(),collapse="_")
+saveRDS(res, file = file1)
+saveRDS(figures, file = file2)
+```
