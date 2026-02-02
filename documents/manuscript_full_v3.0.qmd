@@ -29,27 +29,29 @@ knitr::opts_chunk$set(
   # screenshot.opts = list(zoom = 5))
 
 # loadin libraries
-library(ratioPCR)
-# library(qpcR)
+library(rPCR)
+library(qpcR)
 library(ggplot2)
-# library(ggbreak)
-# library(ggpubr)
-# library(ggsci)
-# library(dplyr)
-# library(reshape2)
-# library(RColorBrewer)
-# library(ggh4x) # ggh4x::strip_themed
-# library(cowplot)
-# library(latex2exp)
-# library(grid)
-# library(ggthemes)
-# library(viridis)
-# library(devEMF)
-# library(lemon)
+library(ggbreak)
+library(ggpubr)
+library(ggsci)
+library(dplyr)
+library(reshape2)
+library(RColorBrewer)
+library(ggh4x)
+library(cowplot)
+library(latex2exp)
+library(grid)
+library(ggthemes)
+library(viridis)
+library(devEMF)
+library(lemon)
 suppressPackageStartupMessages(library(purrr))
-ppath <- "/scicore/home/sinnreic/kinter/Rproj/ratioPCR/"
+ppath <- "/scicore/home/sinnreic/kinter/Rprojects/rPCR/"
+tag <- format(Sys.time(), "%d%m%Y_%H%M%S")
+tag <- "test"
 
-fpath <- paste0(ppath,"documents/figures/")
+fpath <- paste0(ppath,"documents/figures/",tag,"/")
 
 calibrationFile <- "documents/extdata/20191120AS calibration.xlsx"
 
@@ -65,17 +67,16 @@ datalist <- c("F","bF")
 modellist <- c("linear","single")
 import <- rpcr_calibDetect(import, qual="")
 # import$sample <- factor(import$sample)
- import$USI <- import$FA/(import$FA+import$FB)
- import$bUSI <- import$bFA/(import$bFA+import$bFB)
+ import$USI <- import$Fincl/(import$Fincl+import$Fexcl)
+ import$bUSI <- import$bFincl/(import$bFincl+import$bFexcl)
 
 # List of standards used for the calibration curve
 psiCal <- c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1)
 tPSI <- rep(psiCal, each = 3)
 
-rpcr_palette <- c("#E64B35FF","#4DBBD5FF","#00A087FF","#3C5488FF","#F39B7FFF","#8491B4FF","#91D1C2FF","#DC0000FF","#7E6148FF","#B09C85FF")
 
 
-rpcr_col_target <- rpcr_palette[-c(1,3)]
+rpcr_col_target <- pal_npg("nrc")(10)[-c(1,3)]
 rpcr_col_probe <- c(rgb(199, 235, 211, maxColorValue = 255),rgb(255, 255, 190, maxColorValue = 255),rgb(255, 190, 190, maxColorValue = 255))
 rpcr_col_probe <- c("#E64B35FF",rgb(255, 255, 100, maxColorValue = 255),"#00A087FF")
 rpcr_col_sample <- colorRampPalette(c("grey90", "grey30"))  
@@ -124,25 +125,22 @@ iso_color <- if (colplot) rpcr_col_probe[c(1, 3)] else rev(rpcr_col_sample(2))
 plots <- rpcr_plotCalibSummary(import, colplot = colplot, color_probe = rpcr_col_probe)
 
 
-df <- tidyr::pivot_longer(import,
-   cols = c("FA","FB","bFA","bFB"),   # columns to reshape
-    names_to = "variable",       # new column for former column names
-    values_to = "value"          # new column for values
-  )
-
-
+df <- melt(import,
+           value_name="value",
+           measure.vars =c("Fincl","Fexcl","bFincl","bFexcl"),
+           id = c("cycle","target","sample","well"))
 df <- df[df$sample %in% c("0", "100"), ]
 
-strip <-  ggh4x::strip_themed(background_y = if (colplot) ggh4x::elem_list_rect(fill = target_color) else element_blank(),background_x = element_blank())
+strip <-  strip_themed(background_y = if (colplot) elem_list_rect(fill = target_color) else element_blank(),background_x = element_blank())
 
-relabel <- as_labeller(c("bFA" = "inclusion", "bFB" = "exclusion","0" = "0%", "100" = "100%.","KIF13A" = "KIF13A","NUMA1" = "NUMA1","SYNE1" = "SYNE1","template" = "template isoform","cross"="cross-\nreactive","correct"="correct\nisoform"))
+relabel <- as_labeller(c("bFincl" = "inclusion", "bFexcl" = "exclusion","0" = "0%", "100" = "100%.","KIF13A" = "KIF13A","NUMA1" = "NUMA1","SYNE1" = "SYNE1","template" = "template isoform","cross"="cross-\nreactive","correct"="correct\nisoform"))
 
 
 df$info <- "template"
-df <- df[df$cycle==45&df$variable %in% c("bFA","bFB"),]
+df <- df[df$cycle==45&df$variable %in% c("bFincl","bFexcl"),]
 df$cat <- FALSE
-df[df$sample==0,]$cat <- df[df$sample==0,]$variable=="bFB"
-df[df$sample==100,]$cat <- df[df$sample==100,]$variable=="bFA"
+df[df$sample==0,]$cat <- df[df$sample==0,]$variable=="bFexcl"
+df[df$sample==100,]$cat <- df[df$sample==100,]$variable=="bFincl"
 
 df$cat <- c("correct","cross")[2-1*df$cat]
 
@@ -151,7 +149,7 @@ p3 <- ggplot() + stat_summary(data=df,aes(x=sample,y=value,group=variable), fun 
   stat_summary(data=df,aes(x=sample,y=value),fun.data = mean_se, geom = "errorbar", 
      width = 0.5, size = 0.5, col = "black") + 
   scale_y_continuous(breaks = c(0,5,10),labels = scales::number_format(accuracy = 1)) +
-  ggh4x::facet_grid2(target ~ cat,strip=strip,labeller = relabel,scales="free_x", independent = "x") +
+  facet_grid2(target ~ cat,strip=strip,labeller = relabel,scales="free_x", independent = "x") +
   theme_rpcr()  +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   theme( axis.text.y=element_text(size = 10),panel.spacing = unit(1, "lines"),strip.text.y = element_blank(),strip.text.x=element_text(size = 10,face = "plain")) +
@@ -162,13 +160,13 @@ p3 <- ggplot() + stat_summary(data=df,aes(x=sample,y=value,group=variable), fun 
   
 
 
-figures[[analysis]]$A <- ggpubr::ggarrange(plots[[1]][[3]],
+figures[[analysis]]$A <- ggarrange(plots[[1]][[3]],
                 plots[[1]][[4]] + 
                 theme(strip.background.y = element_blank(),strip.text.y = element_blank()) + 
                 labs(title = " ",x ="Fluorescence signal [deltaRn]\n(inclusion probe)", y = "Fluorescence signal [deltaRn]\n(exclusion probe)"),
                 p3, ncol = 3, nrow = 1,labels = c("A","B","C"),common.legend = TRUE, legend="bottom", widths = c(4, 2,2))
 
-figures[[analysis]]$B <- ggpubr::ggarrange(plots[[2]][[3]],
+figures[[analysis]]$B <- ggarrange(plots[[2]][[3]],
                 plots[[2]][[4]]+ 
                 theme(strip.background.y = element_blank(),strip.text.y = element_blank()) + 
                 labs(title = " ",x ="Fluorescence signal [deltaRn]\n(inclusion probe)", y = "Fluorescence signal [deltaRn]\n(exclusion probe)"),
@@ -205,12 +203,12 @@ psave("Figure1E",plots[[1]][[5]] + ylim(-0.2,1.2) + xlim(15,45) + theme(legend.p
 
 ```
 
-```{r Figure_Gibbs}
+```{nr Figure_Gibbs}
 
 colplot= FALSE
 single <- TRUE
 analysis <- "Gibbs"
-Gibbs <- read.delim("/scicore/home/sinnreic/kinter/Rprojects.old/rPCR/documents/extdata/Gibbs energy probe.txt")
+Gibbs <- read.delim("/scicore/home/sinnreic/kinter/R projects/rPCR/documents/extdata/Gibbs energy probe.txt")
 
 exclude <- c(5,8,9)
 if (single) {
@@ -252,7 +250,7 @@ theme(axis.line=element_blank(),
       plot.background=element_blank())
 
 
-
+rpcr_palette <- pal_npg("nrc",alpha=1)
 
 figures[[analysis]]
 
@@ -263,19 +261,16 @@ ggsave(paste0(fpath,analysis,".png"), figures[[analysis]],width=4, dpi=300)
 ```{r}
 
 
-df <- 
-  tidyr::pivot_longer(import,
-    cols = c("FA","FB","bFA","bFB"),   # columns to reshape
-    names_to = "variable",       # new column for former column names
-    values_to = "value"          # new column for values
-  )
-
+df <- melt(import,
+           value_name="value",
+           measure.vars =c("Fincl","Fexcl","bFincl","bFexcl"),
+           id = c("cycle","target","sample","well"))
 
 df <- df[df$sample %in% c("0", "100"), ]
 
 df$info <- "template"
-a <- "FA"
-b <- "FB"
+a <- "Fincl"
+b <- "Fexcl"
 df <- df[df$variable %in% c(a,b),]
 df$cat <- FALSE
 df[df$sample==0,]$cat <- df[df$sample==0,]$variable==b
@@ -284,8 +279,8 @@ df[df$sample==100,]$cat <- df[df$sample==100,]$variable==a
 df$cat <- c("correct","cross")[2-1*df$cat]
 
 
-plot <- ggplot(data=df,aes(x=cycle,y=value,group=interaction(well,variable),col=cat)) + geom_line() + ggh4x::facet_grid2(target~sample,axes = "all")
-plot <- plot + theme(axis.line=element_line(colour = "black", size = 1),
+plot <- ggplot(data=df,aes(x=cycle,y=value,group=interaction(well,variable),col=cat)) + geom_line() + facet_grid2(target~sample,axes = "all")
+plot <- plot + theme(axis.line=element_line(colour = "black", linewidth = 1),
                     strip.background = element_blank(),
                      axis.title.x=element_blank(),
                      axis.title.y=element_blank(),
@@ -296,8 +291,8 @@ plot <- plot + theme(axis.line=element_line(colour = "black", size = 1),
 
 plot1 <- plot
 
-plot <- ggplot(data=df,aes(x=cycle,y=value,group=interaction(well,variable),col=variable)) + geom_line() + ggh4x::facet_grid2(target~sample,axes = "all")
-plot <- plot + theme(axis.line=element_line(colour = "black", size = 1),
+plot <- ggplot(data=df,aes(x=cycle,y=value,group=interaction(well,variable),col=variable)) + geom_line() + facet_grid2(target~sample,axes = "all")
+plot <- plot + theme(axis.line=element_line(colour = "black", linewidth = 1),
                     strip.background = element_blank(),
                      axis.title.x=element_blank(),
                      axis.title.y=element_blank(),
@@ -308,7 +303,7 @@ plot <- plot + theme(axis.line=element_line(colour = "black", size = 1),
 
 ggsave(paste0(fpath,"Cross2.png"), plot, width=6,height=6, dpi=300)
 if (exists("p3")) {
-  p <- ggpubr::ggarrange(plot,p3,common.legend = TRUE, legend="bottom",widths = c(5,2))
+  p <- ggarrange(plot,p3,common.legend = TRUE, legend="bottom",widths = c(5,2))
 }
 ggsave(paste0(fpath,"Cross3.png"), p, width=6,height=6, dpi=300)
 ggsave(paste0(fpath,"Cross2.png"), p3, width=3, height=6,dpi=300)
@@ -370,7 +365,7 @@ p2 <- rpcr_plotCalib(import,
                     color_target = rpcr_col_target,
                     color_sample = rpcr_col_sample)                    
 
-part1 <- ggpubr::ggarrange(plots[[1]][[1]],
+part1 <- ggarrange(plots[[1]][[1]],
                    plots[[2]][[1]],
                    plots[[3]],
                    plots[[4]],
@@ -380,14 +375,14 @@ part1 <- ggpubr::ggarrange(plots[[1]][[1]],
                    legend ="bottom",
                    common.legend=TRUE) # ,hjust = 2)
 
- part2 <- ggpubr::ggarrange(p1[[3]],
+ part2 <- ggarrange(p1[[3]],
                     p2[[3]],
                     ncol = 2,
                     labels = c("E","F"),
                     legend ="bottom",
                     common.legend=TRUE) # ,hjust = 5)
  
-figures[[analysis]]$A <-  ggpubr::ggarrange(part1,
+figures[[analysis]]$A <-  ggarrange(part1,
                       part2,
                       ncol = 1,
                       nrow = 2,
@@ -395,28 +390,28 @@ figures[[analysis]]$A <-  ggpubr::ggarrange(part1,
                       legend ="bottom",
                       common.legend = TRUE)
  
- example1 <- rpcr_fit(import[import$well == "E7", c("FA", "FB")],
+ example1 <- rpcr_fit(import[import$well == "E7", c("Fincl", "Fexcl")],
                     model = "single",
                     rtype = "ip",
                     plot = TRUE,
                     aslist = TRUE,
                     line = TRUE)$plot
  
- example2 <- rpcr_fit(import[import$well == "E7", c("bFA", "bFB")],
+ example2 <- rpcr_fit(import[import$well == "E7", c("bFincl", "bFexcl")],
                     model = "single",
                     rtype = "ip",
                     plot = TRUE,
                     aslist = TRUE,
                     line = TRUE)$plot
 
- part3 <- ggpubr::ggarrange(example1[[1]],example1[[2]],example2[[1]],example1[[2]],
+ part3 <- ggarrange(example1[[1]],example1[[2]],example2[[1]],example1[[2]],
                       ncol = 4,
                       nrow = 1,
                       legend ="bottom",
                       common.legend = TRUE)
  
  
-figures[[analysis]]$B <-  ggpubr::ggarrange(part3,
+figures[[analysis]]$B <-  ggarrange(part3,
                       part1,
                       ncol = 1,
                       nrow = 2,
@@ -454,7 +449,7 @@ p2 <- do.call(rpcr_plotCalib,c(list(import, var="cPSI"),settings))
 p3 <- do.call(rpcr_plotCalib,c(list(import, calib = TRUE, signal = "deltaRn"),settings))
 p4 <- do.call(rpcr_plotCalib,c(list(import, var = "cPSI", signal = "deltaRn"),settings)) 
 
-figures[[analysis]] <-  ggpubr::ggarrange(p1[[3]],p2[[3]],p3[[3]],p4[[3]],
+figures[[analysis]] <-  ggarrange(p1[[3]],p2[[3]],p3[[3]],p4[[3]],
                       ncol = 4,
                       nrow = 1,
                       legend ="bottom",
@@ -531,10 +526,10 @@ ppp1 <- ggplot() + theme_rpcr() + geom_hline(yintercept = unique(df$tPSI), colou
                      scale_fill_gradientn(colours = rpcr_col_probe) +
                      # paste(calibration,"using",datatype), title = target)  +
                       scale_y_continuous(breaks=unique(df$tPSI),limits=c(-0.1,1.1)) +
-       ggh4x::facet_grid2( target ~ derivative + factor(datatype,c("Rn","deltaRn")) + variable ,
+       facet_grid2( target ~ derivative + factor(datatype,c("Rn","deltaRn")) + variable ,
                             axes = "x") 
 # theme(strip.background = element_blank(), strip.text = element_blank())
-                           # strip = ggh4x::strip_themed(background = element_blank())
+                           # strip = strip_themed(background = element_blank())
 
 
 ppp1b <-ggplot() + theme_rpcr() + geom_hline(yintercept = unique(df$tPSI), colour="grey50", linetype = "longdash") + 
@@ -549,11 +544,11 @@ ppp2 <- ggplot() + theme_rpcr() +
                      scale_fill_gradientn(colours = rpcr_col_probe) +
                      # paste(calibration,"using",datatype), title = target)  +
                       scale_y_continuous(limits=c(-0.1,0.1)) +
-       ggh4x::facet_grid2(derivative + factor(datatype,c("Rn","deltaRn"))  ~ target + variable,
+       facet_grid2(derivative + factor(datatype,c("Rn","deltaRn"))  ~ target + variable,
                             switch = "y",
                             axes = "x") 
 # theme(strip.background = element_blank(), strip.text = element_blank())
-                           # strip = ggh4x::strip_themed(background = element_blank())
+                           # strip = strip_themed(background = element_blank())
 
 
 
@@ -639,16 +634,16 @@ plots1RSE <- setNames(lapply(parameters,function(parameter)
                  }), targets)
                ), parameters)
 
-plotMix1 <- ggpubr::ggarrange(plotlist=unlist(plots1MSE, recursive = FALSE),ncol=3,nrow=2)
-plotMix2 <- ggpubr::ggarrange(plotlist=unlist(plots1RSE, recursive = FALSE),ncol=3,nrow=2)
-plotMix3 <- ggpubr::ggarrange(plotlist=c(unlist(plots1MSE, recursive = FALSE),unlist(plots1RSE, recursive = FALSE)),ncol=3,nrow=4)
-plotMix4 <- ggpubr::ggarrange(plotlist=unlist(plots1RSE, recursive = FALSE)[4:6],ncol=3,nrow=1)
+plotMix1 <- ggarrange(plotlist=unlist(plots1MSE, recursive = FALSE),ncol=3,nrow=2)
+plotMix2 <- ggarrange(plotlist=unlist(plots1RSE, recursive = FALSE),ncol=3,nrow=2)
+plotMix3 <- ggarrange(plotlist=c(unlist(plots1MSE, recursive = FALSE),unlist(plots1RSE, recursive = FALSE)),ncol=3,nrow=4)
+plotMix4 <- ggarrange(plotlist=unlist(plots1RSE, recursive = FALSE)[4:6],ncol=3,nrow=1)
 
 
 
 
 
-finish12 <- ggpubr::ggarrange(plots$`0D`$Rn$KIF13A$USI,plots$`0D`$Rn$KIF13A$cPSI,plots$`0D`$Rn$NUMA1$USI,plots$`0D`$Rn$NUMA1$cPSI,plots$`0D`$Rn$SYNE1$USI,plots$`0D`$Rn$SYNE1$cPSI,
+finish12 <- ggarrange(plots$`0D`$Rn$KIF13A$USI,plots$`0D`$Rn$KIF13A$cPSI,plots$`0D`$Rn$NUMA1$USI,plots$`0D`$Rn$NUMA1$cPSI,plots$`0D`$Rn$SYNE1$USI,plots$`0D`$Rn$SYNE1$cPSI,
                       plots$`0D`$deltaRn$KIF13A$USI,plots$`0D`$deltaRn$KIF13A$cPSI,plots$`0D`$deltaRn$NUMA1$USI,plots$`0D`$deltaRn$NUMA1$cPSI,plots$`0D`$deltaRn$SYNE1$USI,plots$`0D`$deltaRn$SYNE1$cPSI,
                       plots$`1D`$Rn$KIF13A$USI,plots$`1D`$Rn$KIF13A$cPSI,plots$`1D`$Rn$NUMA1$USI,plots$`1D`$Rn$NUMA1$cPSI,plots$`1D`$Rn$SYNE1$USI,plots$`1D`$Rn$SYNE1$cPSI,
                       ncol=6,
@@ -656,7 +651,7 @@ finish12 <- ggpubr::ggarrange(plots$`0D`$Rn$KIF13A$USI,plots$`0D`$Rn$KIF13A$cPSI
                       legend ="bottom",
                       common.legend = TRUE)
 
-finish13 <- ggpubr::ggarrange(plotlist <- do.call(c, unlist(plots2, recursive=FALSE)),
+finish13 <- ggarrange(plotlist <- do.call(c, unlist(plots2, recursive=FALSE)),
                       ncol=6,
                       nrow=3,
                       legend ="bottom",
@@ -731,8 +726,8 @@ p5b <- ggplot(failed) + geom_point(aes(x=cycle,y=failed, col = target, group = i
 
 
 
-p4a  <- ggpubr::ggarrange(p1a, p1b,p2a, p2b,p3a,p3b, ncol=2, nrow=3,  legend= "none", labels=c("A","B","C","D"),align="v")
-p4b  <- ggpubr::ggarrange(p5b + theme(plot.margin = unit(c(0,0,0,0), 'lines')),p5a + theme(plot.margin = unit(c(0,0,0.2,0), 'lines')), ncol=1, heights = c(1,5), common.legend = TRUE, legend="bottom",align="v")
+p4a  <- ggarrange(p1a, p1b,p2a, p2b,p3a,p3b, ncol=2, nrow=3,  legend= "none", labels=c("A","B","C","D"),align="v")
+p4b  <- ggarrange(p5b + theme(plot.margin = unit(c(0,0,0,0), 'lines')),p5a + theme(plot.margin = unit(c(0,0,0.2,0), 'lines')), ncol=1, heights = c(1,5), common.legend = TRUE, legend="bottom",align="v")
 
 p_legend_a <- as_ggplot(get_legend(p1a
                                    + guides(colour = guide_legend(nrow = 1))
@@ -741,11 +736,11 @@ p_legend_a <- as_ggplot(get_legend(p1a
 p_legend_b1 <- as_ggplot(get_legend(p3b + guides(shape = FALSE) + theme(plot.margin = unit(c(0,0,0,0), 'lines')) ))
 p_legend_b2 <- as_ggplot(get_legend(p3b + guides(color = FALSE) + theme(plot.margin = unit(c(0,0,0,0), 'lines')) ))
 
-p4 <- ggpubr::ggarrange(nullplot,p4a,p_legend_a,
-                # ggpubr::ggarrange(nullplot, p_legend_a, nullplot, nrow = 1, widths = c(0.5,1,0.5), legend = "none"),
+p4 <- ggarrange(nullplot,p4a,p_legend_a,
+                # ggarrange(nullplot, p_legend_a, nullplot, nrow = 1, widths = c(0.5,1,0.5), legend = "none"),
                 nullplot,
-                ggpubr::ggarrange(nullplot, nullplot, nullplot, nrow = 1, widths = c(0.5,1,0.5), legend = "none",labels=c("","E","")),
-                ggpubr::ggarrange(nullplot, p4b, nullplot, nrow = 1, widths = c(0.5, 1, 0.5), legend = "right"),
+                ggarrange(nullplot, nullplot, nullplot, nrow = 1, widths = c(0.5,1,0.5), legend = "none",labels=c("","E","")),
+                ggarrange(nullplot, p4b, nullplot, nrow = 1, widths = c(0.5, 1, 0.5), legend = "right"),
                 nullplot,
                 p_legend_b1,
                 p_legend_b2,
@@ -816,7 +811,7 @@ df$signal <- factor(df$signal, levels=c("Rn.0D","deltaRn.0D","Rn.1D"), labels=c(
 
 
   plot1 <- plot + 
-    ggh4x::facet_grid2(target ~ signal, switch = "y", strip = ggh4x::strip_themed(background_y = ggh4x::elem_list_rect(fill = rpcr_col_target)),axes = "x") +
+    facet_grid2(target ~ signal, switch = "y", strip = strip_themed(background_y = elem_list_rect(fill = rpcr_col_target)),axes = "x") +
     geom_boxplot(aes(x=cycle,y=delta,group=cycle),outlier.shape = NA) +
     geom_jitter(aes(x=cycle,y=delta, group=interaction(cycle,tPSI),col=tPSI), # col= if (colplot) as.factor(tPSI) else "black",
                              width=jwidth,
@@ -836,7 +831,7 @@ df$signal <- factor(df$signal, levels=c("Rn.0D","deltaRn.0D","Rn.1D"), labels=c(
   
   plot2 <- ggplot(data=df) +
     theme_rpcr() +  scale_colour_gradientn(colours = rpcr_col_probe)  +
-    ggh4x::facet_grid2(target ~ signal,  axes = "all")+
+    facet_grid2(target ~ signal,  axes = "all")+
     geom_violin(aes(x=cycle,y=delta,group=cycle)) + #,fill="grey90") +
     geom_jitter(aes(x=cycle,y=delta, group=interaction(cycle,tPSI),col=tPSI), # col= if (colplot) as.factor(tPSI) else "black",
                              width=jwidth,
@@ -1458,7 +1453,7 @@ print("OK0")
   }
     print("OK2")
   merge_plots <- list(p1 + theme(plot.margin = unit(c(1,1,1,1), 'lines')),p2 + theme(plot.title = element_blank(),plot.margin = unit(c(1,1,1,1), 'lines')))
-  list( ggpubr::ggarrange(plotlist=merge_plots, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v"),p1,p2)
+  list( ggarrange(plotlist=merge_plots, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v"),p1,p2)
 }
     
 
@@ -1468,12 +1463,12 @@ plot_re <- plot_sim(sim_fun="rpcr_simpsi",para="re",range=seq(0,1,0.05),title= T
 plot_ri <- plot_sim(sim_fun="rpcr_simpsi",para="ri",range=seq(0,1,0.05),title= TeX("$Modelling~parameter~r_i$"))
 plot_g <- plot_sim(sim_fun="rpcr_simpsi",para="g",range=seq(1,10,0.4),title= TeX("$Modelling~parameter~gamma$"))
 
-plot_final1 <- ggpubr::ggarrange(plot_a[[1]],plot_g[[1]],plot_ri[[1]],plot_re[[1]],ncol=2,nrow=2)
-plot_final2 <- ggpubr::ggarrange(plot_a[[2]],plot_g[[2]],plot_ri[[2]],plot_re[[2]],ncol=2,nrow=2)
-plot_final3 <- ggpubr::ggarrange(plot_a[[3]],plot_g[[3]],plot_ri[[3]],plot_re[[3]],ncol=2,nrow=2)
-plot_final4 <- ggpubr::ggarrange(plot_final2,plot_final3,nrow=2)
-plot_final5 <- ggpubr::ggarrange(plot_final2,plot_final3,ncol=2)
-plot_final6 <- ggpubr::ggarrange(plot_a[[1]],plot_g[[1]],plot_ri[[1]],plot_re[[1]],ncol=4,nrow=1)
+plot_final1 <- ggarrange(plot_a[[1]],plot_g[[1]],plot_ri[[1]],plot_re[[1]],ncol=2,nrow=2)
+plot_final2 <- ggarrange(plot_a[[2]],plot_g[[2]],plot_ri[[2]],plot_re[[2]],ncol=2,nrow=2)
+plot_final3 <- ggarrange(plot_a[[3]],plot_g[[3]],plot_ri[[3]],plot_re[[3]],ncol=2,nrow=2)
+plot_final4 <- ggarrange(plot_final2,plot_final3,nrow=2)
+plot_final5 <- ggarrange(plot_final2,plot_final3,ncol=2)
+plot_final6 <- ggarrange(plot_a[[1]],plot_g[[1]],plot_ri[[1]],plot_re[[1]],ncol=4,nrow=1)
 
 
 merge_theme <-       theme(
@@ -1515,12 +1510,12 @@ merge_g <- list(
   plot_g[[3]] + theme(plot.title = element_blank(),plot.margin = margin_2_b) + merge_theme 
   )
 ratio <- 2
-merge_a_f <- ggpubr::ggarrange(plotlist=merge_a, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
-merge_ri_f <- ggpubr::ggarrange(plotlist=merge_ri, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
-merge_re_f <- ggpubr::ggarrange(plotlist=merge_re, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
-merge_g_f <- ggpubr::ggarrange(plotlist=merge_g, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+merge_a_f <- ggarrange(plotlist=merge_a, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+merge_ri_f <- ggarrange(plotlist=merge_ri, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+merge_re_f <- ggarrange(plotlist=merge_re, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+merge_g_f <- ggarrange(plotlist=merge_g, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
 
-plot_final <-  ggpubr::ggarrange(merge_a_f,merge_ri_f,merge_re_f,merge_g_f,ncol=4,nrow=1,widths=c(1.29,1,1,1))
+plot_final <-  ggarrange(merge_a_f,merge_ri_f,merge_re_f,merge_g_f,ncol=4,nrow=1,widths=c(1.29,1,1,1))
 
 ```
 
@@ -1569,7 +1564,7 @@ geom_layer2 <- lapply(curves, function (args) { geom_function( fun = delta, args
 
     
   merge_plots <- list(p1 + theme(plot.margin = unit(c(1,1,1,1), 'lines')),p2 + theme(plot.title = element_blank(),plot.margin = unit(c(1,1,1,1), 'lines')))
-  ggpubr::ggarrange(plotlist=merge_plots, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="hv")
+  ggarrange(plotlist=merge_plots, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="hv")
 }
 
 
