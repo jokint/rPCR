@@ -1,0 +1,172 @@
+LOG_STDOUT        | warning | You are overriding Ba_PA_k1 with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding Polymerase with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding ProbeA with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding ProbeB with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding Signal_A with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding Signal_B with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding lFluoA with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding lFluoB with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding startPrimer with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_STDOUT        | warning | You are overriding startTemplate with a small value or zero.
+|                 | |       | This could lead to numerically dirty solutions or divisions by zero if not tearingStrictness=veryStrict.
+LOG_SUCCESS       | info    | The initialization finished successfully without homotopy method.
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((Bs.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= Bs.c, has value: -6.00023e-46"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((Bs.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= Bs.n, has value: -1.20005e-50"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((AaBs.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaBs.c, has value: -2.1521e-54"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((AaBs.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaBs.n, has value: -4.30419e-59"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaBs.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaBs.c, has value: -9.11841e-41"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaBs.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaBs.n, has value: -1.82368e-45"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaBsPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaBsPoly.c, has value: -1.46303e-42"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaBsPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaBsPoly.n, has value: -2.92605e-47"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BsPrs.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrs.c, has value: -5.28958e-47"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BsPrs.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrs.n, has value: -1.05792e-51"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BsPB.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPB.c, has value: -5.40099e-47"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BsPB.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPB.n, has value: -1.0802e-51"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaPraPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPraPoly.c, has value: -2.0089e-41"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaPraPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPraPoly.n, has value: -4.01781e-46"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((AaBsPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaBsPoly.c, has value: -3.77409e-56"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((AaBsPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaBsPoly.n, has value: -7.54818e-61"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaPraPA.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPraPA.c, has value: -1.1161e-76"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaPraPA.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPraPA.n, has value: -2.2322e-81"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaPraPAPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPraPAPoly.c, has value: -2.74894e-78"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.249263
+|                 | |       | ((BaPraPAPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPraPAPoly.n, has value: -5.49787e-83"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((Ba.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= Ba.c, has value: -2.50046e-36"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((Ba.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= Ba.n, has value: -5.00093e-41"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((AsBa.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsBa.c, has value: -2.12305e-44"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((AsBa.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsBa.n, has value: -4.2461e-49"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BaPra.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPra.c, has value: -4.02659e-38"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BaPra.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPra.n, has value: -8.05319e-43"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BsPrsPB.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrsPB.c, has value: -3.05361e-48"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BsPrsPB.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrsPB.n, has value: -6.10721e-53"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BsPrsPBPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrsPBPoly.c, has value: -9.77195e-51"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BsPrsPBPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrsPBPoly.n, has value: -1.95439e-55"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BsPrsPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrsPoly.c, has value: -2.77626e-49"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((BsPrsPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BsPrsPoly.n, has value: -5.55252e-54"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((AsBaPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsBaPoly.c, has value: -4.88934e-46"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.500000
+|                 | |       | ((AsBaPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsBaPoly.n, has value: -9.77869e-51"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 0.690157
+|                 | |       | ((BaPA.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPA.c, has value: -5.61347e-56"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 0.690157
+|                 | |       | ((BaPA.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= BaPA.n, has value: -1.12269e-60"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 15.000000
+|                 | |       | ((As.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= As.c, has value: -3.71536e-16"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 15.000000
+|                 | |       | ((As.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= As.n, has value: -7.43073e-21"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 22.000000
+|                 | |       | ((AsPrs.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsPrs.c, has value: -5.45139e-17"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 22.000000
+|                 | |       | ((AsPrs.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsPrs.n, has value: -1.09028e-21"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 22.000000
+|                 | |       | ((AsPrsPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsPrsPoly.c, has value: -1.75027e-19"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 22.000000
+|                 | |       | ((AsPrsPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsPrsPoly.n, has value: -3.50055e-24"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 40.500000
+|                 | |       | ((Aa.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= Aa.c, has value: -7.7127e-18"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 40.500000
+|                 | |       | ((Aa.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= Aa.n, has value: -1.54254e-22"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 42.000000
+|                 | |       | ((AaPra.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaPra.c, has value: -1.05519e-17"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 42.000000
+|                 | |       | ((AaPra.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaPra.n, has value: -2.11038e-22"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 42.000000
+|                 | |       | ((AaPraPoly.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaPraPoly.c, has value: -3.43276e-20"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 42.000000
+|                 | |       | ((AaPraPoly.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AaPraPoly.n, has value: -6.86552e-25"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:5:3-5:251:writable]
+|                 | |       | The following assertion has been violated at time 43.500000
+|                 | |       | ((AsPA.c >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsPA.c, has value: -3.39375e-17"
+LOG_ASSERT        | info    | [/scicore/home/sinnreic/kinter/.openmodelica/libraries/BioChem 2.0/Substances/Substance.mo:7:3-7:255:writable]
+|                 | |       | The following assertion has been violated at time 43.500000
+|                 | |       | ((AsPA.n >= 0.0)) --> "Variable violating min constraint: 0.0 <= AsPA.n, has value: -6.78751e-22"
+LOG_SUCCESS       | info    | The simulation finished successfully.
