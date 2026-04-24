@@ -9,7 +9,7 @@ rpcr_calCip(
   qc_tres = 1.15,
   detail = FALSE,
   len = 10,
-  mincycle = 13,
+  mincycle = 10,
   stringent = TRUE,
   lead = 3,
   ...

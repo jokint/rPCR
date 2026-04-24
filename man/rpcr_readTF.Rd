@@ -7,11 +7,13 @@
 rpcr_readTF(filepath)
 }
 \arguments{
-\item{filepath}{optional specifiy export file}
+\item{filepath}{Optional character string specifying the path to the file.
+If missing, a file selection dialog will open automatically.}
 }
 \value{
-data frame with pcr data and calculations
+A data frame with extracted and standardized PCR amplification data.
 }
 \description{
-Reading ThermoFisher Export files
+Reads the amplification data sheet from ThermoFisher export files.
+Auto-detects the header line and standardizes well names.
 }

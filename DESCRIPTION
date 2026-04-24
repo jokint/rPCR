@@ -24,3 +24,7 @@ Imports:
     scales,
     signal,
     tidyr
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr

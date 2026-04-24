@@ -1,0 +1,77 @@
+---
+title: "Getting Started with ratioPCR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with ratioPCR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+The `ratioPCR` package is designed to read, process, and analyze quantitative real-time PCR data from ThermoFisher instruments using a clean and intuitive S3 object system.
+
+```{r setup}
+library(ratioPCR)
+```
+
+## 1. Importing Data
+
+The starting point of the workflow is the `rpcr_import()` function. It reads the raw export file and automatically passes it to `rpcr_wrap()`. The result is a specialized data object of the S3 class `rpcr_raw`.
+
+*(Note: If you leave the filepath empty, a file selection dialog will open automatically).*
+
+```{r import, eval = FALSE}
+# Interactive file import
+pcr_data <- rpcr_import()
+```
+
+For this tutorial, we simulate the output generated after the import:
+
+```{r dummy_data}
+# Building a dummy data frame simulating the rpcr_raw structure
+dummy_df <- data.frame(
+  well = rep(c("A1", "A2"), each = 40),
+  cycle = rep(1:40, 2),
+  target = rep(c("Gene_A_incl", "Gene_A_excl"), each = 40),
+  sample = "Sample_1",
+  FA = runif(80, 0.1, 10),
+  FB = runif(80, 0.1, 10),
+  tPSI = 0.5, # Required for calibration
+  stringsAsFactors = FALSE
+)
+
+# Convert the dummy data to the S3 class
+pcr_data <- rpcr_wrap(dummy_df)
+```
+
+## 2. Inspecting the S3 Object
+
+Thanks to the `rpcr_raw` S3 class, you do not need to memorize complex commands to see what is inside your data. Standard base R functions like `print()` adapt automatically to provide a clean overview.
+
+```{r print}
+print(pcr_data)
+```
+
+## 3. Visualization with ggplot2 and Patchwork
+
+The core feature for quality control is the custom `plot()` method. It utilizes `rpcr_plotData` and `rpcr_plotBar`. If you choose `plot_type = "all"`, the generated charts are automatically combined into a single grid layout using the `patchwork` package.
+
+```{r plot, warning = FALSE, message = FALSE}
+# Plot all available diagnostic charts in a 2-column grid
+plot(pcr_data, plot_type = "all", signal = "Rn")
+```
+
+You can also request specific chart types by changing the arguments:
+
+```{r plot_single, warning = FALSE}
+# Request only the bar charts
+plot(pcr_data, plot_type = "cycle", signal = "Rn")
+```

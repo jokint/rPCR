@@ -20,7 +20,7 @@
 #' @importFrom utils tail
 #' @export
 #'
-rpcr_calCip <- function(x, qc_tres = 1.15, detail = FALSE,len=10,mincycle=13,stringent =TRUE,lead=3,...){
+rpcr_calCip <- function(x, qc_tres = 1.15, detail = FALSE,len=10,mincycle=10,stringent =TRUE,lead=3,...){
   ## get first derivative data and look for stretches of positive or negative values
   ## The increase in qPCR signal will lead to long stretches of positive values
   x <- x-min(x)

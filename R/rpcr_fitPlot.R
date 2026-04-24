@@ -23,26 +23,35 @@ rpcr_fitPlot <- function(x,
 
   df <- x$DATA
   df$cycle <- 1:dim(df)[1]
-  df$usi <- df$incl/df$total
-  df$dincl <- rpcr_calDer(df$incl,offset=offset)
-  df$dexcl <- rpcr_calDer(df$excl,offset=offset)
-  df$dtotal <- rpcr_calDer(df$total,offset=offset)
-  df$dusi <- df$dincl/df$dtotal
+  df$usi <- df$FA/df$FT
+  df$dFA <- rpcr_calDer(df$FA,offset=offset)
+  df$dFB <- rpcr_calDer(df$FB,offset=offset)
+  df$dFT <- rpcr_calDer(df$FT,offset=offset)
+  df$dusi <- df$dFA/df$dFT
 
   range <- c(x$RANGE[1]:x$RANGE[2])
 
-  width <- max(df$total)-min(df$total)
-  lim_min <- min(df$total)-width/6
-  limits <- c(if(lim_min>0) 0 else lim_min,max(df$total)+width/6)
+  width <- max(df$FT)-min(df$FT)
+  lim_min <- min(df$FT)-width/6
+  limits <- c(if(lim_min>0) 0 else lim_min,max(df$FT)+width/6)
 
-  width <- max(df$dtotal)-min(df$dtotal)
-  lim_min <- min(df$dtotal)-width/6
-  lim_max <- max(df$dtotal)+width/6
+  width <- max(df$dFT)-min(df$dFT)
+  lim_min <- min(df$dFT)-width/6
+  lim_max <- max(df$dFT)+width/6
   dlimits <- c(if(lim_min>0) 0 else lim_min,lim_max)
 
-  ip <- which.max(df$dtotal)
+  ip <- which.max(df$dFT)
 
-  dfm <- melt(df,measure.vars=c("incl","excl","total","dincl","dexcl","dtotal"))
+  dfm <- df %>%
+    pivot_longer(
+      cols = c("FA", "FB", "FT", "dFA", "dFB", "dFT"),
+      names_to = "variable",
+      values_to = "value"
+    )
+
+
+
+
   dfm$variable <- as.character(dfm$variable)
 
   # cat(paste("Model:",x$MODEL,"\n"))
@@ -83,11 +92,11 @@ rpcr_fitPlot <- function(x,
     labs(y = "apparent PSI (uncalibrated)\n[calculated using first derivative data]")
 
   plots[[7]] <- plot +
-    geom_path(data = df[df$cycle %in% range,], aes(x = total, y = incl), col = "grey30",arrow = arrow(angle=15,type="closed", unit(0.25, "inches"))) +
-    stat_smooth(data = df[df$cycle %in% range,], aes(x = total, y = incl),method = "lm", col = "red") +
-    geom_point(data = df[df$cycle %in% range,], aes(x = total, y = incl),color="grey30",alpha=0.2,size=4) +
-    geom_point(data = df, aes(x = total, y = incl)) +
-    geom_point(data = df[df$cycle %in% ip,], aes(x = total, y = incl), color = 2) +
+    geom_path(data = df[df$cycle %in% range,], aes(x = FT, y = FA), col = "grey30",arrow = arrow(angle=15,type="closed", unit(0.25, "inches"))) +
+    stat_smooth(data = df[df$cycle %in% range,], aes(x = FT, y = FA),method = "lm", col = "red") +
+    geom_point(data = df[df$cycle %in% range,], aes(x = FT, y = FA),color="grey30",alpha=0.2,size=4) +
+    geom_point(data = df, aes(x = FT, y = FA)) +
+    geom_point(data = df[df$cycle %in% ip,], aes(x = FT, y = FA), color = 2) +
     design +
     labs(y = "fluorescence signal\n(inclusion probe)",
          x = "fluorescence signal\n(both probes - total signal)")
@@ -95,11 +104,11 @@ rpcr_fitPlot <- function(x,
   plots[[5]] <- plots[[7]] + scale_y_continuous(limits = limits) +scale_x_continuous(limits = limits)
 
   plots[[8]] <- plot +
-    geom_path(data =  df[df$cycle %in% range,], aes(x = dtotal, y = dincl), col = "grey30",arrow = arrow(angle=15,type="closed", unit(0.25, "inches"))) +
-    stat_smooth(data = df[df$cycle %in% range,], aes(x = dtotal, y = dincl),method = "lm", col = "red") +
-    geom_point(data = df[df$cycle %in% range,], aes(x = dtotal, y = dincl),color="grey30",alpha=0.2,size=4) +
-    geom_point(data = df, aes(x = dtotal, y = dincl)) +
-    geom_point(data = df[df$cycle %in% ip,], aes(x = dtotal, y = dincl), color = 2) +
+    geom_path(data =  df[df$cycle %in% range,], aes(x = dFT, y = dFA), col = "grey30",arrow = arrow(angle=15,type="closed", unit(0.25, "inches"))) +
+    stat_smooth(data = df[df$cycle %in% range,], aes(x = dFT, y = dFA),method = "lm", col = "red") +
+    geom_point(data = df[df$cycle %in% range,], aes(x = dFT, y = dFA),color="grey30",alpha=0.2,size=4) +
+    geom_point(data = df, aes(x = dFT, y = dFA)) +
+    geom_point(data = df[df$cycle %in% ip,], aes(x = dFT, y = dFA), color = 2) +
     design +
     labs(y = "1st derivate of fluorescence signal\n(inclusion probe)",
          x = "1st derivate of fluorescence signal\n(both probes - total signal)")

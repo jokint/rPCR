@@ -14,7 +14,7 @@ rpcr_calibrate(
   tres,
   method,
   model,
-  qual,
+  qual = "Cal",
   signal,
   rtype,
   ...

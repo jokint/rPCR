@@ -41,10 +41,7 @@ rpcr_fit <- function(df,
   p_model <- c("linear","single")
   p_method <- list(c("FB","FA"),c("FA","FB"),c("FA","FT"),c("FB","FT"),1,2,3,4)
   p_convert <- list(quote(1/(slope+1)),quote(slope/(slope+1)),quote(slope),quote(1-slope))
-  # print(calib)
-  # calib <- as.data.frame(t(calib))
-  # names(calib) <- c("a","ri","re","g")
-  # print(calib)
+
   ## include some qc testing
 
   flag_test <- TRUE
@@ -122,12 +119,14 @@ rpcr_fit <- function(df,
   range <- as.numeric(range)+roff
 
   ## Testing range parameters
-
+  if (any(is.na(rtable))) flag_test <- FALSE else {
   if (range[1]<1) flag_test <- FALSE  # range[1] <- 1
   if (range[2]>dim(df)[1]) flag_test <- FALSE # range[2] <- dim(df)[1]
   if (range[1]>range[2]) flag_test <- FALSE   # range[1] <- range[2]
   if (range[1]==range[2]) model="single"
-    ## Constructing the fitting model using parameter model and method
+  }
+
+  ## Constructing the fitting model using parameter model and method
   res <- list()
   class(res) <- c("qspcr","ln")
   rownames(df) <- c(1:dim(df)[1])

@@ -10,37 +10,38 @@ rpcr_plotBar(
   ctype = "fix",
   signal = "Rn",
   derivate = "",
-  title = "normalized flourescence\\n ",
-  color_target = brewer.pal(n = 8, name = "Dark2"),
-  color_sample = colorRampPalette(c("grey90", "grey30")),
+  title = "normalized fluorescence\\n",
+  color_target = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
+  color_sample = grDevices::colorRampPalette(c("grey90", "grey30")),
   colplot = FALSE,
   ...
 )
 }
 \arguments{
-\item{data}{data}
+\item{data}{A data frame (or `rpcr_raw` object) containing the PCR data.}
 
-\item{cycle}{???}
+\item{cycle}{Numeric. Specific cycle to plot. If `NULL`, defaults to the maximum cycle.}
 
-\item{ctype}{???}
+\item{ctype}{Character string indicating cycle type. If not `"fix"`, uses `rcycle`.}
 
-\item{signal}{type of signal}
+\item{signal}{Character string indicating the signal type. Options are `"Rn"` or `"deltaRn"`.}
 
-\item{derivate}{derivate}
+\item{derivate}{Character string for derivative prefix.}
 
-\item{title}{alternative plot title}
+\item{title}{Alternative plot title.}
 
-\item{color_target}{color vector for different targets}
+\item{color_target}{Color vector for different targets.}
 
-\item{color_sample}{color vector for different samples}
+\item{color_sample}{Color mapping function for different samples.}
 
-\item{colplot}{TRUE id plot in color}
+\item{colplot}{Logical. If `TRUE`, adds background colors based on target.}
 
-\item{...}{passing arguments}
+\item{...}{Further arguments passed to `rpcr_calibDetect`.}
 }
 \value{
-plots
+A ggplot object.
 }
 \description{
-Plotting Bar charts of calibration Data
+Generates bar charts with standard error bars for PCR calibration data
+at a specific amplification cycle.
 }

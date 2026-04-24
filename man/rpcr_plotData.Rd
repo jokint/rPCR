@@ -2,13 +2,13 @@
 % Please edit documentation in R/rpcr_plotData.R
 \name{rpcr_plotData}
 \alias{rpcr_plotData}
-\title{Title}
+\title{Plot Detailed PCR Amplification Data}
 \usage{
 rpcr_plotData(
   df0,
   signal = "Rn",
   derivate = "",
-  title = "normalized flourescence\\n ",
+  title = "normalized fluorescence\\n",
   color_target = RColorBrewer::brewer.pal(n = 8, name = "Dark2"),
   color_sample = grDevices::colorRampPalette(c("grey90", "grey30")),
   color_probe = c(rgb(199, 235, 211, maxColorValue = 255), rgb(255, 255, 190,
@@ -26,23 +26,44 @@ rpcr_plotData(
 )
 }
 \arguments{
-\item{df0}{data}
+\item{df0}{A data frame with the PCR data.}
 
-\item{signal}{type of signal}
+\item{signal}{Character string, either `"Rn"` or `"deltaRn"`.}
 
-\item{title}{alternative title text}
+\item{derivate}{Character string for derivative prefix (e.g., `"d1"`).}
 
-\item{color_target}{color of targets}
+\item{title}{Alternative title text for the plots.}
 
-\item{color_sample}{color of samples}
+\item{color_target}{Vector of colors for the targets.}
 
-\item{colplot}{TRUE for color plotting}
+\item{color_sample}{A color mapping function for samples.}
 
-\item{...}{passing arguments}
+\item{color_probe}{Vector of colors for probes.}
+
+\item{colplot}{Logical. If `TRUE`, adds background colors based on target.}
+
+\item{label}{Logical. Currently unused.}
+
+\item{wline}{Numeric. Line width for plot lines.}
+
+\item{slabel}{Numeric. Axis text size.}
+
+\item{stitle}{Numeric. Axis title size.}
+
+\item{text}{Logical. Currently unused.}
+
+\item{alpha}{Character. Column name to map to alpha (transparency).}
+
+\item{targetA}{Character. Custom label for Target A.}
+
+\item{targetB}{Character. Custom label for Target B.}
+
+\item{...}{Further arguments passed to methods.}
 }
 \value{
-plots
+A named list of 5 ggplot objects.
 }
 \description{
-Title
+Generates a series of diagnostic plots (grids, phase plots, and ratios)
+for PCR amplification data. Returns a list of ggplot objects.
 }
