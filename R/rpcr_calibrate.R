@@ -36,7 +36,7 @@ rpcr_calibrate <- function(data,
                           tres,
                           method,
                           model,
-                          qual,
+                          qual="Cal",
                           signal,
                           rtype,
                           ...) {

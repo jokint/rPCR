@@ -2,16 +2,33 @@
 % Please edit documentation in R/rpcr_import.R
 \name{rpcr_import}
 \alias{rpcr_import}
-\title{Imports a ThermoFisher PCR export file}
+\title{Import and Process ThermoFisher PCR Export Files}
 \usage{
 rpcr_import(file)
 }
 \arguments{
-\item{file}{file to be imported}
+\item{file}{Optional file path. If missing, a dialog opens.}
 }
 \value{
-imported data
+Returns an object of S3 class `pcr_raw`.
 }
 \description{
-Imports a ThermoFisher PCR export file
+High-level function to import ThermoFisher PCR data and automatically
+convert it into the `pcr_raw` S3 class.
+}
+\details{
+The function operates in two steps:
+1. It reads the raw ThermoFisher file format using `rpcr_readTF()`.
+2. It wraps and converts the data into the package-specific `rpcr_raw` S3 class
+   using `rpcr_wrap()`.
+}
+\examples{
+\dontrun{
+# Interactive file selection:
+my_data <- rpcr_import()
+
+# Direct file path:
+my_data <- rpcr_import("path/to/my_pcr_export.txt")
+}
+
 }

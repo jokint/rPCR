@@ -27,7 +27,7 @@ rpcr_batchFit <- function(data,
   tryCatch({
     for (target in unique(data$target)) {
 
-      para <- if (target %in% rownames(calib)) calib[target,] else calib
+      para <- if (target %in% rownames(calib)) calib[target,-1] else calib
 
       for (well in unique(data[data$target==target,"well"])) {
         res <- rpcr_fit(data[data$well == well & data$target == target,cols],calib=unlist(para),...)

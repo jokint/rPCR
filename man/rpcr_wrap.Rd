@@ -7,15 +7,31 @@
 rpcr_wrap(df, full = FALSE, convert = NULL)
 }
 \arguments{
-\item{df}{data frame with the PCR data}
+\item{df}{A data frame containing raw PCR data from `rpcr_readTF()`.}
 
-\item{full}{TRUE For additional calculations}
+\item{full}{Logical. If `TRUE`, additional derivative and efficiency
+calculations are performed.}
 
-\item{convert}{???}
+\item{convert}{Not yet implemented.}
 }
 \value{
-data frame with results ?
+Returns an object of S3 class `rpcr_raw` (inheriting from `data.frame`).
 }
 \description{
-Reformatting of imported data and additional calculations
+Standardizes target names, pivots data from long to wide format, and
+performs baseline calculations and optional derivative operations.
+}
+\examples{
+dummy_data <- data.frame(
+  well = c("A1", "A1", "A2", "A2"),
+  cycle = c(1, 1, 1, 1),
+  target = c("targetA_incl", "targetB_excl", "targetA_incl", "targetB_excl"),
+  rn = c(0.1, 0.2, 0.15, 0.25),
+  drn = c(0.01, 0.02, 0.01, 0.03),
+  stringsAsFactors = FALSE
+)
+
+result <- rpcr_wrap(dummy_data)
+class(result)
+
 }
