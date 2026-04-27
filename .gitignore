@@ -2,7 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
-documents/
-documents/figures/
-documents/manuscript_full_v3.0.qmd
+inst/documents/
+inst/documents/figures/
+inst/documents/manuscript_full_v3.0.qmd
 inst/doc

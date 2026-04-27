@@ -44,7 +44,7 @@ dummy_df <- data.frame(
   sample = "Sample_1",
   FA = runif(80, 0.1, 10),
   FB = runif(80, 0.1, 10),
-  tPSI = 0.5, # Required for calibration
+  tprop = 0.5, # Required for calibration
   stringsAsFactors = FALSE
 )
 

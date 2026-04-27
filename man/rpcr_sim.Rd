@@ -5,7 +5,7 @@
 \title{Function to simulate a range of values for a specific parameters}
 \usage{
 rpcr_sim(
-  psiCal = c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1),
+  tprop = c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1),
   a = 1,
   ri = 0,
   re = 0,
@@ -15,7 +15,7 @@ rpcr_sim(
 )
 }
 \arguments{
-\item{psiCal}{calibration values}
+\item{tprop}{calibration values}
 
 \item{a}{fitting parameter}
 
@@ -26,7 +26,7 @@ rpcr_sim(
 \item{steps}{number of steps to be simulated}
 }
 \value{
-a set of biased PSIs for a range of parameter values
+a set of biased proportions for a range of parameter values
 }
 \description{
 Function to simulate a range of values for a specific parameters

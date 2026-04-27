@@ -1,4 +1,4 @@
-#' Function to calculate USI form multiple PCR experiments
+#' Function to calculate apparent proportion (aprop) form multiple PCR experiments
 #'
 #' @param data data.frame with the pcr flourecence intensities
 #' @param calib Calibration parameters to calibrate the calculted ratio
@@ -39,10 +39,10 @@ rpcr_batchFit <- function(data,
                            range = paste(res$RANGE,collapse=":"),
                            model = res$MODEL,
                            rtype = paste(res$RTYPE,collapse=":"),
-                           USI = res$USI[1],
-                           cPSI = res$cPSI)
+                           aprop = res$aprop[1],
+                           cprop = res$cprop)
 
-        if (!is.null(res$lm) & !is.na(temp$USI))
+        if (!is.null(res$lm) & !is.na(temp$aprop))
           temp <- cbind(temp,
                         stdErr = summary(res$lm)$coefficients[2,2],
                         sigma  = summary(res$lm)$sigma,
@@ -54,7 +54,7 @@ rpcr_batchFit <- function(data,
         ### adding custom fields
         custom <-match("rcycle",names(data))
 
-        if (custom<ncol(data)) {
+        if (!is.na(custom) && custom < ncol(data)) {
           n1 <- names(data[,(custom+1):ncol(data)])
           temp1 <- unique(data[data$well==well,(custom+1):ncol(data)])
           names(temp1) <- n1

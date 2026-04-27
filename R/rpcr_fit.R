@@ -1,14 +1,14 @@
-#' Calculate USI from splice PCR data
+#' Calculate proportion from ratioPCR data
 #'
-#' Calculate the USI from splice PCR data. Inclusion and exclusion probe data.
-#' Different methods can by used for the calculation of USI
+#' Calculate the aprop from fluorescence data.
+#' Different methods can by used for the calculation of aprop
 #'
 #' @param df Data frame containing the flourescence data of the inclusion and exclusion probe
-#' @param tres Threshold value to define a range of cycles used for USI calculation when the range type is dynamic.
-#' @param rtype A vector of two values defining the method, how to determine the starting and ending cycle used for USI calculation
+#' @param tres Threshold value to define a range of cycles used for aprop calculation when the range type is dynamic.
+#' @param rtype A vector of two values defining the method, how to determine the starting and ending cycle used for aprop calculation
 #'   Possible methods c("dynamic","full","ip",c(1:dim((df))))
 #' @param roff offset from range defined by rtype
-#' @param model Single String defining the model used to calculate the USI c("linear","single")
+#' @param model Single String defining the model used to calculate aprop c("linear","single")
 #' @param method Method type how to calculate the ratio
 #' @param calib calibration parameter for ratio correction
 #' @param plot print plot (default = FALSE)
@@ -19,7 +19,6 @@
 #' @param ... parameters passed to other functions
 #'
 #' @return calculated ratio
-#' @importFrom utils tail
 #' @export
 #'
 rpcr_fit <- function(df,
@@ -138,11 +137,11 @@ rpcr_fit <- function(df,
 
   if (flag_test) {
     if (model=="linear"){
-      LM <- lm(paste0(method[[1]]," ~ ",method[[2]]), data = df[range[1]:range[2],])
+      LM <- stats::lm(paste0(method[[1]]," ~ ",method[[2]]), data = df[range[1]:range[2],])
       res$CALL <- as.list(LM$call)
       res$lm <- LM
-      if(!any(is.na(coef(LM)))) {
-        slope <- coef(LM)[2]
+      if(!any(is.na(stats::coef(LM)))) {
+        slope <- stats::coef(LM)[2]
         res$SLOPE <- c(slope,summary(LM)$coefficients[2,4],summary(LM)$adj.r.squared)
         names(res$SLOPE) <- c("slope","Pr(>|t|)","adj.r.squared")
         } else {
@@ -155,11 +154,11 @@ rpcr_fit <- function(df,
       names(res$SLOPE) <- c("slope")
       }
 
-    res$USI <- eval(p_convert[[Position(function(x) identical(x, method), p_method, nomatch = 0)]])
-    res$cPSI <- rpcr_psi(res$SLOPE,calib=calib, ...)[1]
+    res$aprop <- eval(p_convert[[Position(function(x) identical(x, method), p_method, nomatch = 0)]])
+    res$cprop <- rpcr_prop(res$SLOPE,calib=calib, ...)[1]
   } else {
-    res$USI <- NA
-    res$cPSI <- NA
+    res$aprop <- NA
+    res$cprop <- NA
   }
 
   if (plot) res$plot <- rpcr_fitPlot(res,...) else res$plot <- NA

@@ -2,7 +2,7 @@
 % Please edit documentation in R/rpcr_fit.R
 \name{rpcr_fit}
 \alias{rpcr_fit}
-\title{Calculate USI from splice PCR data}
+\title{Calculate proportion from ratioPCR data}
 \usage{
 rpcr_fit(
   df,
@@ -23,14 +23,14 @@ rpcr_fit(
 \arguments{
 \item{df}{Data frame containing the flourescence data of the inclusion and exclusion probe}
 
-\item{tres}{Threshold value to define a range of cycles used for USI calculation when the range type is dynamic.}
+\item{tres}{Threshold value to define a range of cycles used for aprop calculation when the range type is dynamic.}
 
-\item{rtype}{A vector of two values defining the method, how to determine the starting and ending cycle used for USI calculation
+\item{rtype}{A vector of two values defining the method, how to determine the starting and ending cycle used for aprop calculation
 Possible methods c("dynamic","full","ip",c(1:dim((df))))}
 
 \item{roff}{offset from range defined by rtype}
 
-\item{model}{Single String defining the model used to calculate the USI c("linear","single")}
+\item{model}{Single String defining the model used to calculate aprop c("linear","single")}
 
 \item{method}{Method type how to calculate the ratio}
 
@@ -52,6 +52,6 @@ Possible methods c("dynamic","full","ip",c(1:dim((df))))}
 calculated ratio
 }
 \description{
-Calculate the USI from splice PCR data. Inclusion and exclusion probe data.
-Different methods can by used for the calculation of USI
+Calculate the aprop from fluorescence data.
+Different methods can by used for the calculation of aprop
 }

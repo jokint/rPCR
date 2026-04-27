@@ -2,7 +2,7 @@
 % Please edit documentation in R/rpcr_batchFit.R
 \name{rpcr_batchFit}
 \alias{rpcr_batchFit}
-\title{Function to calculate USI form multiple PCR experiments}
+\title{Function to calculate apparent proportion (aprop) form multiple PCR experiments}
 \usage{
 rpcr_batchFit(data, calib = c(1, 0, 0, 1, 0), info = FALSE, signal = "Rn", ...)
 }
@@ -21,5 +21,5 @@ rpcr_batchFit(data, calib = c(1, 0, 0, 1, 0), info = FALSE, signal = "Rn", ...)
 returns fittings for calibration curves
 }
 \description{
-Function to calculate USI form multiple PCR experiments
+Function to calculate apparent proportion (aprop) form multiple PCR experiments
 }

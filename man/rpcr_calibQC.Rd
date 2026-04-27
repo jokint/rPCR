@@ -4,12 +4,12 @@
 \alias{rpcr_calibQC}
 \title{Testing quality of calibration experiment}
 \usage{
-rpcr_calibQC(df, tPSI, ...)
+rpcr_calibQC(df, tprop, ...)
 }
 \arguments{
 \item{df}{PCR data}
 
-\item{tPSI}{theoretical PSI used to calibrate the data}
+\item{tprop}{theoretical proportions used to calibrate the data}
 
 \item{...}{paramters for the rpcr_batchFit, rpcr_fit and rpcr_calib routines}
 }

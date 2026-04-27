@@ -14,7 +14,7 @@ rpcr_calibDetect(data, qual = "Cal", percentage = FALSE, ...)
 \item{percentage}{percentage (default = FALSE)}
 }
 \value{
-amplification data with tPCI column for detected calibration samples
+amplification data with tprop column for detected calibration samples
 }
 \description{
 Detect calibrations samples
