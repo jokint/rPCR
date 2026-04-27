@@ -7,7 +7,8 @@
 #' @export
 rpcr_calDer <- function(df, offset = 1, ...) {
   len <- length(df)
+  if (len<2) return(rep(0,length(df)))
   df <- data.frame(data = df, der = 0)
-  df[(1 + offset):(len - 1 + offset), 2] <- df[2:len, 1] - df[1:len - 1, 1]
+  df[(1 + offset):(len - 1 + offset), 2] <- df[2:len, 1] - df[1:(len - 1), 1]
   return(df$der)
 }

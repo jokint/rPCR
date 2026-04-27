@@ -27,10 +27,10 @@ rpcr_calCip <- function(x, qc_tres = 1.15, detail = FALSE,len=10,mincycle=10,str
   temp <- rle(sign(rpcr_calDer(x)))
   length2 <- temp$lengths
   length2[temp$values==-1] <- 0
-  max <- (1:length(length2))[length2>len]
-  if (length(max)==0) max <- which.max(length2)
-  a <- unlist(lapply(max, function(max) if (max==1) 1 else sum(temp$lengths[1:(max-1)])+1))
-  b <- a+length2[max]-1
+  max_idx <- (1:length(length2))[length2>len]
+  if (length(max_idx)==0) max_idx <- which.max(length2)
+  a <- unlist(lapply(max_idx, function(idx) if (idx==1) 1 else sum(temp$lengths[1:(idx-1)])+1))
+  b <- a+length2[max_idx]-1
   temp <- do.call(rbind,lapply(1:length(a),function(z) {
     ## get second derivative data
     temp <- rle(sign(rpcr_calDer(rpcr_calDer(x))[a[z]:b[z]]))
@@ -40,14 +40,13 @@ rpcr_calCip <- function(x, qc_tres = 1.15, detail = FALSE,len=10,mincycle=10,str
     })))) else data.frame(0,0,0,0)
     ## QC the first D2 increasing part must be more than lead=3 cycles
     t1 <- t1[t1[,2]>lead,]
-    #  length2[temp$values==-1] <- 0
-    #  max <- which.max(length2)
+
     if (!length(t1[,4])==0) {
-    max <- utils::tail(t1[t1[,4]==max(t1[,4],na.rm=TRUE),1],1)
-    c <- a[z]+ if (max==1) 0 else sum(temp$lengths[1:(max-1)])
-    d <- c+temp$length[max]-1
+    max_idx <- utils::tail(t1[t1[,4]==max(t1[,4],na.rm=TRUE),1],1)
+    c <- a[z]+ if (max_idx==1) 0 else sum(temp$lengths[1:(max_idx-1)])
+    d <- c+temp$length[max_idx]-1
     e <- d+1
-    f <- d+temp$length[max+1]
+    f <- d+temp$length[max_idx+1]
     g <- x[f]/x[c]
     dif <- diff(diff(x))
     part <- dif[e+2]/sum(dif[(d-3):(d+3)])
@@ -59,7 +58,7 @@ rpcr_calCip <- function(x, qc_tres = 1.15, detail = FALSE,len=10,mincycle=10,str
     } else data.frame(c=0,d=0,e=0,f=0,g=0,ci=0,Fci=0,qc=FALSE,comment=FALSE)
   }))
 
-  res <- cbind(max=max,a=a,b=b,temp)
+  res <- cbind(max=max_idx,a=a,b=b,temp)
   if (detail) return(res)
   temp <- res[res$qc==TRUE,]
   res <- if (nrow(temp)==0) if (stringent) NA else res[which.max(res$d),]$d else temp[which.max(temp$d),]$d

@@ -48,32 +48,32 @@ rpcr_calibrate <- function(data,
 
 
   if (median) {
-    df$summary <- df$summary %>% dplyr::group_by(target,sample) %>% dplyr::mutate(USI = median(USI))
-    df$summary <- as.data.frame(unique(df$summary[,c("sample","target","USI","tPSI")]))
+    df$summary <- df$summary %>% dplyr::group_by(target,sample) %>% dplyr::mutate(aprop = median(aprop))
+    df$summary <- as.data.frame(unique(df$summary[,c("sample","target","aprop","tprop")]))
   }
   ### for each target the calibration is performed separately
 
 
   for (targets in unique(df$summary$target)){
 
-    ### The calibration parameters is calculated from calibration samples (tPSI<>NA)
-    df[["calib"]][[targets]]  <- rpcr_calib(df$summary[df$summary$target==targets&!is.na(df$summary$tPSI),], prop = prop, extend = extend) # added ",...)" 7.8.2025 removed again 18.8
+    ### The calibration parameters is calculated from calibration samples (tprop<>NA)
+    df[["calib"]][[targets]]  <- rpcr_calib(df$summary[df$summary$target==targets&!is.na(df$summary$tprop),], prop = prop, extend = extend) # added ",...)" 7.8.2025 removed again 18.8
 
-    ### if calibration was successful, cPSI and delta calculated using the calibration parameter
+    ### if calibration was successful, cprop and delta calculated using the calibration parameter
     if (!is.na(df[["calib"]][targets])) {
-    df$summary[df$summary$target==targets,"cPSI"] <-rpcr_psi(df$summary[df$summary$target==targets,"USI"], stats::coef(df$calib[[targets]]),prop=prop,extend=extend)
-    df$summary[df$summary$target==targets,"delta"] <-df$summary[df$summary$target==targets,"cPSI"]-df$summary[df$summary$target==targets,"tPSI"]
+    df$summary[df$summary$target==targets,"cprop"] <-rpcr_prop(df$summary[df$summary$target==targets,"aprop"], stats::coef(df$calib[[targets]]),prop=prop,extend=extend)
+    df$summary[df$summary$target==targets,"delta"] <-df$summary[df$summary$target==targets,"cprop"]-df$summary[df$summary$target==targets,"tprop"]
     }
-    ### if calibration failed, for cPSI and delta is set to NA
+    ### if calibration failed, for cprop and delta is set to NA
     else {
-      df$summary[df$summary$target==targets,"cPSI"] <- NA
+      df$summary[df$summary$target==targets,"cprop"] <- NA
       df$summary[df$summary$target==targets,"delta"] <- NA
     }
   }
 
   ### empty calibration summary data.frame with NA
   summary <- list(calib=data.frame(target=unique(data$target),a=NA,ri=NA,re=NA,g=NA,f=NA),
-                    qc=data.frame(target=unique(data$target),RSSfit=NA,RSEfit=NA,RSScpsi=NA,RSEcpsi=NA,MSDfit=NA,MSDcpsi=NA,facRSE=NA,facMSD=NA,failures=TRUE))
+                    qc=data.frame(target=unique(data$target),RSSfit=NA,RSEfit=NA,RSScprop=NA,RSEcprop=NA,MSDfit=NA,MSDcprop=NA,facRSE=NA,facMSD=NA,failures=TRUE))
 
   ### Coefficients are calculatd
   for (targets in unique(data$target)){
@@ -83,23 +83,23 @@ rpcr_calibrate <- function(data,
       summary$calib[summary$calib$target==targets,names(coef)] <- coef
       rownames(summary$calib) <- summary$calib$target # added 20250902
       summary$qc[summary$qc$target==targets,c("RSSfit","RSEfit")] <- c(RSSfit = stats::deviance(fit),RSEfit=summary(fit)$sigma)
-      temp <- df$summary[df$summary$target==targets&!is.na(df$summary$cPSI)&!is.na(df$summary$tPSI),]
-      if (nrow(temp)>0) summary$qc[summary$qc$target==targets,c("RSScpsi","RSEcpsi")] <- temp %>%
-        dplyr::summarise(RSScpsi = stats::deviance(stats::lm(cPSI ~ tPSI),na.rm=TRUE), RSEcpsi = summary(stats::lm(cPSI ~ tPSI))$sigma)
+      temp <- df$summary[df$summary$target==targets&!is.na(df$summary$cprop)&!is.na(df$summary$tprop),]
+      if (nrow(temp)>0) summary$qc[summary$qc$target==targets,c("RSScprop","RSEcprop")] <- temp %>%
+        dplyr::summarise(RSScprop = stats::deviance(stats::lm(cprop ~ tprop, na.action = na.omit)), RSEcprop = summary(stats::lm(cprop ~ tprop, na.action = na.omit))$sigma)
       }}
 
-  failure <- df$summary[!is.na(df$summary$tPSI),] %>% dplyr::group_by(target) %>%
-        dplyr::summarise(failures = ifelse(any(is.na(cPSI)), TRUE, FALSE))
+  failure <- df$summary[!is.na(df$summary$tprop),] %>% dplyr::group_by(target) %>%
+        dplyr::summarise(failures = ifelse(any(is.na(cprop)), TRUE, FALSE))
 
-    temp <- stats::aggregate(list(sd1 = df$summary[, "USI"] * 100,sd2 = df$summary[, "cPSI"] * 100),
+    temp <- stats::aggregate(list(sd1 = df$summary[, "aprop"] * 100,sd2 = df$summary[, "cprop"] * 100),
                     list(target = df$summary$target, sample = df$summary$sample),
                     sd)
-    temp <- stats::aggregate(list(MSDfit = temp$sd1,MSDcpsi = temp$sd2),
+    temp <- stats::aggregate(list(MSDfit = temp$sd1,MSDcprop = temp$sd2),
                     list(target = temp$target),
                     function(x) mean(x))
-    for (targets in unique(data$target)) summary$qc[summary$qc$target==targets,c("MSDfit","MSDcpsi")] <-temp[temp$target==targets,c("MSDfit","MSDcpsi")]
-    summary$qc$facRSE <- summary$qc$RSEfit/summary$qc$RSEcpsi
-    summary$qc$facMSD <- summary$qc$MSDfit/summary$qc$MSDcpsi
+    for (targets in unique(data$target)) summary$qc[summary$qc$target==targets,c("MSDfit","MSDcprop")] <-temp[temp$target==targets,c("MSDfit","MSDcprop")]
+    summary$qc$facRSE <- summary$qc$RSEfit/summary$qc$RSEcprop
+    summary$qc$facMSD <- summary$qc$MSDfit/summary$qc$MSDcprop
     summary$qc <- merge(summary$qc,failure, by = "target")
 
    # }
@@ -116,7 +116,7 @@ rpcr_calibrate <- function(data,
 
     temp2 <- data.frame(t(temp1))[,output]
 
-    cbind(temp0,mean = mean(temp1[,output]),temp2)
+    out <- cbind(temp0,mean = mean(temp1[,output]),temp2)
 
 
   }
@@ -125,6 +125,6 @@ rpcr_calibrate <- function(data,
   return(out)
 }
 
-utils::globalVariables(c("target","USI","cPSI","sd"))
+utils::globalVariables(c("target","aprop","cprop","sd"))
 
 

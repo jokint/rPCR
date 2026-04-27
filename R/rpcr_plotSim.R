@@ -32,7 +32,7 @@ rpcr_plotSim <- function(para = NULL,
   len <- length(para)
 
   linetypes <- c(1,2,3,4,5)
-  sim_fun <- "rpcr_simpsi"
+  sim_fun <- "rpcr_simprop"
   fun_para <- c("a", "ri", "g", "re")
   names(linetypes) <- c("all",fun_para)
 
@@ -43,37 +43,16 @@ rpcr_plotSim <- function(para = NULL,
   curves <- rbind(col = 2:(length(curves) + 1), curves)
 
 
-
-  # leglabel <-  c(TeX(
-  #   paste0(
-  #     "$\\alpha = ",
-  #     para["a"],
-  #     " ; \\r_e = ",
-  #     para["re"],
-  #     " ; \\r_i = ",
-  #     para["ri"],
-  #     " ; \\gamma= ",
-  #     para["g"],
-  #     "$"
-  #   )
-  # ),
-  # TeX(paste0("$\\alpha = ", para["a"], "$")),
-  # TeX(paste0("$\\r_i = ", para["re"], "$")),
-  # TeX(paste0("$\\r_e = ", para["re"], "$")),
-  # TeX(paste0("$\\gamma = ", para["ri"], "$")))
-
-
-
   if (is.null(append)){
     p1 <- ggplot()+ geom_function(
-      fun = get(sim_fun),
+      fun = match.fun(sim_fun),
       linetype = ctype,
       linewidth = csize,
       col = ccol) +
       scale_colour_brewer(palette = "Dark2")
 
     p2 <- ggplot() + geom_function(
-      fun = function(x) get(sim_fun)(x) - x,
+      fun = function(x) match.fun(sim_fun)(x) - x,
       linetype = ctype,
       linewidth = csize,
       col = ccol) +
@@ -91,7 +70,7 @@ rpcr_plotSim <- function(para = NULL,
       for (j in fun_para) {
         p1 <- p1 + geom_function(
           color = lincols[i],
-          fun = get(sim_fun),
+          fun = match.fun(sim_fun),
           args = para[i, j, drop = FALSE],
           alpha = balpha,
           linewidth = bsize,
@@ -100,7 +79,7 @@ rpcr_plotSim <- function(para = NULL,
 
         p2 <- p2 + geom_function(
           color = lincols[i],
-          fun = function(x, ...) get(sim_fun)(x, ...) - x ,
+          fun = function(x, ...) match.fun(sim_fun)(x, ...) - x ,
           args = para[i, j, drop = FALSE],
           alpha = balpha,
           linewidth = bsize,
@@ -114,7 +93,7 @@ rpcr_plotSim <- function(para = NULL,
   for (i in 1:len) {
     p1 <- p1 + geom_function(
       color = lincols[i],
-      fun = get(sim_fun),
+      fun = match.fun(sim_fun),
       args = para[i, fun_para],
       linewidth = asize,
       alpha = if (is.null(append)) 1 else 0.5
@@ -122,7 +101,7 @@ rpcr_plotSim <- function(para = NULL,
     p2 <- p2 + geom_function(
       color = lincols[i],
       fun = function(x, ...)
-        get(sim_fun)(x, ...) - x,
+        match.fun(sim_fun)(x, ...) - x,
       args = para[i, fun_para,drop=FALSE],
       linewidth = asize,
       alpha = if (is.null(append)) 1 else 0.5
@@ -133,16 +112,6 @@ rpcr_plotSim <- function(para = NULL,
 
 
   }
-
-  # scale_colour_manual(
-  #   name = "parameters",
-  #   breaks = c("all", "a", "re", "ri", "g"),
-  #   values = lincols,
-  #   labels = leglabel
-  # ) +
-  # xlab(TeX("$\\psi$")) +
-  # ylab(TeX("$\\Delta\\psi\\ [\\psi - \\psi_a$]")) +
-  # theme_rpcr()
 
 
   merge <-

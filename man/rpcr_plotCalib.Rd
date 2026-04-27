@@ -21,7 +21,7 @@ rpcr_plotCalib(
     "#A6761D", "#666666"),
   color_sample = colorRampPalette(c("grey90", "grey30")),
   raw = TRUE,
-  var = "USI",
+  var = "aprop",
   ...
 )
 }

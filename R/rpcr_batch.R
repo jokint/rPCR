@@ -14,7 +14,7 @@ rpcr_batch <- function(fun, df, id_col,...) {
     for (i in wells) {
       targets <- unique(df[df$well == i, ]$target)
       for (j in targets) {
-        res <- get(fun)(df[df$well == i & df$target == j, id_col],  id_col = id_col,...)
+        res <- match.fun(fun)(df[df$well == i & df$target == j, id_col],  id_col = id_col,...)
         if (is.data.frame(res)) out <- rbind(out, res) else out <- c(out, res)
       }
     }

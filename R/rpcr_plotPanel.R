@@ -14,8 +14,7 @@ rpcr_plotPanel <- function(df,
                            slabel = 6,
                            stitle = 8,
                            ...) {
-  plist <- names(df)[grep("par
-_", names(df))]
+  plist <- names(df)[grep("par_", names(df))]
   plist <- unlist(lapply(plist, function(x) {
     x[length(unique(df[, x])) > 1]
   }))

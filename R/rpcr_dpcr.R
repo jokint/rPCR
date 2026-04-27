@@ -9,7 +9,7 @@
 rpcr_dpcr <- function(df,...) {
 
   df <- na.omit(df$ratioB)
-  peaks <- rpcr_dPeak(df,output="details",...)
+  peaks <- rpcr_dpeak(df,output="details",...)
   dense <- peaks$dense
   peaks <- peaks$peak
   ratios <- c(peaks$dvalue[1]/(peaks$dvalue[1]+peaks$dvalue[5]),

@@ -12,11 +12,8 @@ rpcr_norm <- function(df,type=c("T","A"),mode=2) {
   if (!("cycle" %in% names(df))) df$cycle <- 1:nrow(df)
   df <- df %>% relocate(cycle)
   pos <- match("T",type)
-  print(pos)
   if (is.na(pos)) df$Total <- df[,2] + df[,3] else df$Total <- df[,1+pos]
-  print(df$Total)
-  print(df[,2])
-  temp <- rpcr_calCip(df$Total,detail=TRUE)
+    temp <- rpcr_calCip(df$Total,detail=TRUE)
   df[,2] <- df[,2] - df[temp$a,2]
   df[,3] <- df[,3] - df[temp$a,3]
   if (is.na(pos)) df$Total <- df[,2] + df[,3] else df$Total <- df[,1+pos]
@@ -27,9 +24,6 @@ rpcr_norm <- function(df,type=c("T","A"),mode=2) {
   Ci <- nfit["Ci"]
   multi <- df$Total[as.integer(Ci)]+ (df$Total[as.integer(Ci)+1]-df$Total[as.integer(Ci)])* (Ci - as.integer(Ci))
 
-  # multi <- df$Total[temp[1,6]]
-  # multi <- max(df$Total)
-  print(multi)
   df[,2] <- (df[,2]-nfit["b"])/(multi-nfit["b"])
   df[,3] <- df[,3]/multi
 

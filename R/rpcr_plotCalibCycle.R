@@ -27,7 +27,7 @@ rpcr_plotCalibCycle <- function(df,title="",colplot=TRUE,box=TRUE,brew_y = brewe
 
   if (box) plot <- plot +  geom_boxplot(aes(x=get(var),y=delta,group=get(var)))
 
-  plot <- plot + geom_jitter(aes(x=get(var),y=delta, group=interaction(get(var),tPSI)), # col= if (colplot) as.factor(tPSI) else "black",
+  plot <- plot + geom_jitter(aes(x=get(var),y=delta, group=interaction(get(var),tprop)),
                              width=jwidth,
                              alpha=0.2,
                              size=1
