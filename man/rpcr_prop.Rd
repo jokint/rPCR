@@ -38,5 +38,5 @@ calibrated ratio
 Title
 }
 \examples{
-rpcr_ratio(df = data.frame(0.4, 0.2), calib = c(a = 3, ri = 0, re = 0.05))
+rpcr_prop(df = data.frame(0.4, 0.2), calib = c(a = 3, ri = 0, re = 0.05))
 }

@@ -10,7 +10,9 @@
 #'
 rpcr_norm <- function(df,type=c("T","A"),mode=2) {
   if (!("cycle" %in% names(df))) df$cycle <- 1:nrow(df)
-  df <- df %>% relocate(cycle)
+
+  df <- df[, c("cycle", setdiff(names(df), "cycle"))]
+
   pos <- match("T",type)
   if (is.na(pos)) df$Total <- df[,2] + df[,3] else df$Total <- df[,1+pos]
     temp <- rpcr_calCip(df$Total,detail=TRUE)

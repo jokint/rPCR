@@ -86,7 +86,7 @@ rpcr_wrap <- function(df, full = FALSE, convert = NULL) {
   names(df)[names(df) %in% c("rn_A", "rn_B", "drn_A", "drn_B")] <- c(id_FA, id_FB, id_bFA, id_bFB)
 
   # Ensure sample column exists and is positioned correctly
-  if (!hasName(df, "sample")) df$sample <- ""
+  if (!utils::hasName(df, "sample")) df$sample <- ""
 
   # Base R alternative to dplyr::relocate
   sample_idx <- which(names(df) == "sample")
@@ -181,7 +181,7 @@ rpcr_wrap <- function(df, full = FALSE, convert = NULL) {
 
   df$ratio <- df[, id_FA] / df[, id_FB]
   df$bratio <- df[, id_bFA] / df[, id_bFB]
-  df$prop <- df[, id_FA] / df[, id_FT]
+  df$aprop <- df[, id_FA] / df[, id_FT]
   df$bprop <- df[, id_bFA] / df[, id_bFT]
 
   df[, "rcycle"] <- rpcr_batch("rpcr_relCycle", df, id_col = c(id_FT, "cycle"))

@@ -69,6 +69,12 @@ rpcr_plotProp <- function(para=c(a=3,ri=0.1,re=0.2,g=2),data = NULL,ltype = "sol
     theme_rpcr()
 
   merge_plots <- list(p1 + theme(plot.margin = unit(c(1,1,0,1), 'lines')),p2 + theme(plot.title = element_blank(),plot.margin = unit(c(0,1,1,1), 'lines')))
-  p3 <- ggarrange(plotlist=merge_plots, ncol=1,nrow=2, common.legend =TRUE,legend="bottom",heights= c(ratio,1),align="v")
+  p3 <- patchwork::wrap_plots(merge_plots, ncol = 1) +
+    patchwork::plot_layout(
+      heights = c(ratio, 1),
+      guides = "collect"
+    ) &
+    ggplot2::theme(legend.position = "bottom")
+
   if (sub) list(p1,p2 + ggtitle(leglabel[[1]]),p3) else p3
 }

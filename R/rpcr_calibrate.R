@@ -41,35 +41,31 @@ rpcr_calibrate <- function(data,
                           rtype,
                           ...) {
 
-
-  df <- rpcr_batchFit(data,info=TRUE,...)
+  argg <- c(as.list(environment()),list(...))
+  df <- do.call(rpcr_batchFit,c(argg,info = "TRUE"))
 
   df$summary <- rpcr_calibDetect(df$summary,qual=qual,...)
-
 
   if (median) {
     df$summary <- df$summary %>% dplyr::group_by(target,sample) %>% dplyr::mutate(aprop = median(aprop))
     df$summary <- as.data.frame(unique(df$summary[,c("sample","target","aprop","tprop")]))
   }
+
   ### for each target the calibration is performed separately
-
-
   for (targets in unique(df$summary$target)){
 
-    ### The calibration parameters is calculated from calibration samples (tprop<>NA)
+    # The calibration parameters is calculated from calibration samples (tprop<>NA)
     df[["calib"]][[targets]]  <- rpcr_calib(df$summary[df$summary$target==targets&!is.na(df$summary$tprop),], prop = prop, extend = extend) # added ",...)" 7.8.2025 removed again 18.8
 
-    ### if calibration was successful, cprop and delta calculated using the calibration parameter
+    # if calibration was successful, cprop and delta calculated using the calibration parameter
     if (!is.na(df[["calib"]][targets])) {
-    df$summary[df$summary$target==targets,"cprop"] <-rpcr_prop(df$summary[df$summary$target==targets,"aprop"], stats::coef(df$calib[[targets]]),prop=prop,extend=extend)
-    df$summary[df$summary$target==targets,"delta"] <-df$summary[df$summary$target==targets,"cprop"]-df$summary[df$summary$target==targets,"tprop"]
-    }
-    ### if calibration failed, for cprop and delta is set to NA
-    else {
+      df$summary[df$summary$target==targets,"cprop"] <-rpcr_prop(df$summary[df$summary$target==targets,"aprop"], stats::coef(df$calib[[targets]]),prop=prop,extend=extend)
+      df$summary[df$summary$target==targets,"delta"] <-df$summary[df$summary$target==targets,"cprop"]-df$summary[df$summary$target==targets,"tprop"]
+      } else { # if calibration failed, for cprop and delta is set to NA
       df$summary[df$summary$target==targets,"cprop"] <- NA
       df$summary[df$summary$target==targets,"delta"] <- NA
+      }
     }
-  }
 
   ### empty calibration summary data.frame with NA
   summary <- list(calib=data.frame(target=unique(data$target),a=NA,ri=NA,re=NA,g=NA,f=NA),
@@ -87,7 +83,6 @@ rpcr_calibrate <- function(data,
       if (nrow(temp)>0) summary$qc[summary$qc$target==targets,c("RSScprop","RSEcprop")] <- temp %>%
         dplyr::summarise(RSScprop = stats::deviance(stats::lm(cprop ~ tprop, na.action = na.omit)), RSEcprop = summary(stats::lm(cprop ~ tprop, na.action = na.omit))$sigma)
       }}
-
   failure <- df$summary[!is.na(df$summary$tprop),] %>% dplyr::group_by(target) %>%
         dplyr::summarise(failures = ifelse(any(is.na(cprop)), TRUE, FALSE))
 

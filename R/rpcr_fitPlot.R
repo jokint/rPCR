@@ -20,8 +20,7 @@
 rpcr_fitPlot <- function(x,
                          offset = 1,
                          design = theme_rpcr(),
-                         iso_color = c(grDevices::rgb(199, 235, 211, maxColorValue = 255),
-                                       grDevices::rgb(255, 190, 190, maxColorValue = 255)),
+                         iso_color = c("#00A087FF","#E64B35FF" ),
                          aslist = FALSE,
                          line = FALSE,
                          ...) {
@@ -68,17 +67,17 @@ rpcr_fitPlot <- function(x,
 
   # Plot 1: Fluorescence Signal over Time ----
   p1 <- base_line_plot +
-    ggplot2::geom_point(data = dplyr::filter(dfm, !startsWith(variable, "d") & cycle %in% range_seq), aes(x = cycle, y = value, group = variable), color = "grey30", alpha = 0.2, size = 4) +
-    ggplot2::geom_point(data = dplyr::filter(dfm, !startsWith(variable, "d")), aes(x = cycle, y = value, col = variable)) +
-    ggplot2::geom_point(data = dplyr::filter(dfm, !startsWith(variable, "d") & cycle == ip), aes(x = cycle, y = value, group = variable), color = 2) +
+    ggplot2::geom_point(data = dplyr::filter(dfm, !startsWith(variable, "d") & cycle %in% range_seq), aes(x = cycle, y = value, group = variable), color = "grey30", alpha = 0.2, size = 1) +
+    ggplot2::geom_point(data = dplyr::filter(dfm, !startsWith(variable, "d")), aes(x = cycle, y = value, col = variable),size=0.2) +
+    ggplot2::geom_point(data = dplyr::filter(dfm, !startsWith(variable, "d") & cycle == ip), aes(x = cycle, y = value, group = variable), color = 2,size=0.5) +
     ggplot2::scale_colour_manual(values = c(iso_color, "black")) +
     ggplot2::labs(y = "Fluorescence signal")
 
   # Plot 2: First Derivative over Time ----
   p2 <- base_line_plot +
-    ggplot2::geom_point(data = dplyr::filter(dfm, startsWith(variable, "d") & cycle %in% range_seq), aes(x = cycle, y = value, group = variable), color = "grey30", alpha = 0.2, size = 4) +
-    ggplot2::geom_point(data = dplyr::filter(dfm, startsWith(variable, "d")), aes(x = cycle, y = value, col = variable)) +
-    ggplot2::geom_point(data = dplyr::filter(dfm, startsWith(variable, "d") & cycle == ip), aes(x = cycle, y = value, group = variable), color = 2) +
+    ggplot2::geom_point(data = dplyr::filter(dfm, startsWith(variable, "d") & cycle %in% range_seq), aes(x = cycle, y = value, group = variable), color = "grey30", alpha = 0.2, size = 1) +
+    ggplot2::geom_point(data = dplyr::filter(dfm, startsWith(variable, "d")), aes(x = cycle, y = value, col = variable),size=0.2) +
+    ggplot2::geom_point(data = dplyr::filter(dfm, startsWith(variable, "d") & cycle == ip), aes(x = cycle, y = value, group = variable), color = 2,size=0.5) +
     ggplot2::scale_colour_manual(values = c(iso_color, "black")) +
     ggplot2::labs(y = "Fluorescence signal increase\n(first derivative)")
 
@@ -94,7 +93,7 @@ rpcr_fitPlot <- function(x,
   p4 <- base_line_plot +
     ggplot2::geom_point(data = dplyr::filter(df, cycle %in% range_seq), aes(x = cycle, y = daprop), color = "grey30", alpha = 0.2, size = 4) +
     ggplot2::geom_point(data = df, aes(x = cycle, y = daprop), col = 1) +
-    ggplot2::geom_point(data = dplyr::filter(df, cycle == ip), aes(x = cycle, y = daprop), color = 2) +
+    ggplot2::geom_point(data = dplyr::filter(df, cycle == ip), aes(x = cycle, y = .data$daprop), color = 2) +
     ggplot2::scale_y_continuous(limits = c(0, 1)) +
     ggplot2::labs(y = "Apparent proportion\n(first derivative data)")
 

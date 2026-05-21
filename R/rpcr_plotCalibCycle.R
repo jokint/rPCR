@@ -21,7 +21,7 @@ rpcr_plotCalibCycle <- function(df,title="",colplot=TRUE,box=TRUE,brew_y = brewe
 
   if (colplot) {
     plot <- plot + geom_rect(data = data.frame(target= unique(df[order(df$target),"target"]),x=1), aes(fill = target), col = NA, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, alpha = 0.1) +
-      facet_grid2(rows = vars(target), switch = "y", strip = strip_themed(background_y = elem_list_rect(fill = brew_y))) + scale_fill_brewer(palette = "Dark2")
+      ggh4x::facet_grid2(rows = vars(target), switch = "y", strip = ggh4x::strip_themed(background_y = ggh4x::elem_list_rect(fill = brew_y))) + scale_fill_brewer(palette = "Dark2")
   }
   else plot <- plot +facet_grid(rows = vars(target))
 
