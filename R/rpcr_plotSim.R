@@ -113,18 +113,12 @@ rpcr_plotSim <- function(para = NULL,
 
   }
 
-
-  merge <-
-    ggarrange(
-      p1 + theme(plot.margin = unit(c(1, 1, 0, 1), "lines")),
-      p2+ theme(plot.title = element_blank(),plot.margin = unit(c(0, 1, 1, 1), "lines")),
-      ncol = 1,
-      nrow = 2,
-      common.legend = TRUE,
-      legend = "bottom",
+  merge <- (p1 / (p2 + ggplot2::theme(plot.title = ggplot2::element_blank()))) +
+    patchwork::plot_layout(
       heights = c(ratio, 1),
-      align = "v"
-    )
+      guides = "collect"
+    ) &
+    ggplot2::theme(legend.position = "bottom")
 
   return(list(p1,p2,merge))
 }

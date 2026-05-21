@@ -2,7 +2,7 @@
 % Please edit documentation in R/rpcr_fitPlot.R
 \name{rpcr_fitPlot}
 \alias{rpcr_fitPlot}
-\title{Title}
+\title{Plot rpcr Fits and Derivatives}
 \usage{
 rpcr_fitPlot(
   x,
@@ -16,23 +16,23 @@ rpcr_fitPlot(
 )
 }
 \arguments{
-\item{x}{data}
+\item{x}{A list containing a 'DATA' data frame, a length-2 'RANGE' vector, and a 'MODEL' name.}
 
-\item{offset}{offset}
+\item{offset}{Numeric. The cycle offset to pass to the derivative calculation. Default = 1.}
 
-\item{design}{design}
+\item{design}{A ggplot2 theme or design object. Default = theme_rpcr().}
 
-\item{iso_color}{colors}
+\item{iso_color}{A character vector of length 2 defining colors for different variables.}
 
-\item{aslist}{default = FALSE}
+\item{aslist}{Logical. If TRUE, returns a list of individual plots instead of a combined layout. Default = FALSE.}
 
-\item{line}{draw line (default = FALSE)}
+\item{line}{Logical. If TRUE, draws a vertical dashed line at the inflection point. Default = FALSE.}
 
-\item{...}{passing arguments}
+\item{...}{Additional arguments passing through to other functions.}
 }
 \value{
-generated plots
+Either a list of 6 ggplot objects or a combined patchwork arrangement.
 }
 \description{
-Title
+This function generates a series of diagnostic plots for qPCR data.
 }

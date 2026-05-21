@@ -40,7 +40,7 @@ rpcr_plotPanel <- function(df,
       strip.text = element_text(face = "plain")
     ) +
     scale_y_continuous(
-      label = function(x)
+      labels = function(x)
         gsub("\\-0", "-", gsub(
           "\\+0", "", formatC(x, format = "e", digits = 1)
         ))
@@ -55,13 +55,13 @@ rpcr_plotPanel <- function(df,
     ) +
     expand_limits(y = 0, x = 0) +
     scale_x_continuous(
-      label = function(x)
+      labels = function(x)
         gsub("\\-0", "-", gsub(
           "\\+0", "", formatC(x, format = "e", digits = 1)
         ))
     ) +
     scale_y_continuous(
-      label = function(x)
+      labels = function(x)
         gsub("\\-0", "-", gsub(
           "\\+0", "", formatC(x, format = "e", digits = 1)
         ))

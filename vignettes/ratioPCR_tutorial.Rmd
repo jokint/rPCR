@@ -38,14 +38,14 @@ For this tutorial, we simulate the output generated after the import:
 ```{r dummy_data}
 # Building a dummy data frame simulating the rpcr_raw structure
 dummy_df <- data.frame(
-  well = rep(c("A1", "A2"), each = 40),
-  cycle = rep(1:40, 2),
-  target = rep(c("Gene_A_incl", "Gene_A_excl"), each = 40),
-  sample = "Sample_1",
-  FA = runif(80, 0.1, 10),
-  FB = runif(80, 0.1, 10),
-  tprop = 0.5, # Required for calibration
-  stringsAsFactors = FALSE
+    well = rep(c("A1", "A2"), each = 80),
+    cycle = rep(1:40, 4),
+    target = rep(c("Gene_A_incl", "Gene_A_excl"), each = 40),
+    sample = "Sample_1",
+    rn = runif(160, 0.1, 10),
+    drn = runif(160, 0.1, 10),
+    tprop = 0.5, # Required for calibration
+    stringsAsFactors = FALSE
 )
 
 # Convert the dummy data to the S3 class
@@ -66,12 +66,12 @@ The core feature for quality control is the custom `plot()` method. It utilizes 
 
 ```{r plot, warning = FALSE, message = FALSE}
 # Plot all available diagnostic charts in a 2-column grid
-plot(pcr_data, plot_type = "all", signal = "Rn")
+#plot(pcr_data, plot_type = "all", signal = "Rn")
 ```
 
 You can also request specific chart types by changing the arguments:
 
 ```{r plot_single, warning = FALSE}
 # Request only the bar charts
-plot(pcr_data, plot_type = "cycle", signal = "Rn")
+#plot(pcr_data, plot_type = "cycle", signal = "Rn")
 ```

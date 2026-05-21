@@ -18,7 +18,7 @@ rpcr_sim <- function(tprop = c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85,
     lapply(g_range, function(xg) {
     lapply(ri_range, function(xi) {
       lapply(a_range, function(xa) {
-        data.frame(tprop = tprop, a = xa, ri = xi, re = xe, g = xg, sPSI = rpcr_simprop(tprop = tprop, a = xa, ri = xi, re = xe, g=xg))
+        data.frame(tprop = tprop, a = xa, ri = xi, re = xe, g = xg, sprop = rpcr_simprop(tprop = tprop, a = xa, ri = xi, re = xe, g=xg))
       }) %>% purrr::map(dplyr::bind_rows)
     }) %>% purrr::map(dplyr::bind_rows)
   }) %>% purrr::map(dplyr::bind_rows)
