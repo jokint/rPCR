@@ -61,9 +61,10 @@ rpcr_plotData <- function(df0,
   fluo_cols <- paste0(derivate, prefix, c("A", "B"))
 
   # Prevent "NAs introduced by coercion" by converting to factor instead of numeric [1]
-  df0$sample <- as.character(df0$sample) |>
-    gsub(pattern = "%", replacement = "") |>
-    as.numeric()
+  # removed 30.06.2026
+  # df0$sample <- as.character(df0$sample) |>
+  #   gsub(pattern = "%", replacement = "") |>
+  #   as.numeric()
 
   if (signal != "Rn") signal <- "\u0394Rn"
 
