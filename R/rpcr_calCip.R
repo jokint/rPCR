@@ -7,7 +7,7 @@
 #' Ther is no description for this function yet
 #'
 #' @param x a vector of PCR amplification singlas
-#' @param qc_tres treshold
+#' @param qc_tres threshold
 #' @param detail output details
 #' @param len length parameter
 #' @param mincycle minimum cycle

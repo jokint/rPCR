@@ -3,7 +3,7 @@
 #' Calculate the aprop from fluorescence data.
 #' Different methods can by used for the calculation of aprop
 #'
-#' @param df Data frame containing the flourescence data of the inclusion and exclusion probe
+#' @param df Data frame containing the fluorescence data of the inclusion and exclusion probe
 #' @param tres Threshold value to define a range of cycles used for aprop calculation when the range type is dynamic.
 #' @param rtype A vector of two values defining the method, how to determine the starting and ending cycle used for aprop calculation
 #'   Possible methods c("dynamic","full","ip",c(1:dim((df))))
@@ -22,7 +22,7 @@
 #' @export
 #'
 rpcr_fit <- function(df,
-                    tres = c(0,0),     # treshold value to define dynamic range
+                    tres = c(0,0),     # threshold value to define dynamic range
                     rtype="ip", # method to define range
                     roff=c(0,0), # offset from range defined by rtype
                     model="linear", # fitting method: either linear or single
@@ -94,7 +94,7 @@ rpcr_fit <- function(df,
   if ("dynamic" %in% rtype) {
     if (length(tres)==1) tres <- c(tres,tres)
     bool1 <- rle(with(rle(Ft_d1 > Ft_d1_max*tres[1]), rep(lengths == max(lengths[values]) & values, lengths)))
-    if (length(bool1$lengths)==1) bool1$length <- c(0,bool1$lengths) #corrects in case the curve (d1) is always above treshold
+    if (length(bool1$lengths)==1) bool1$length <- c(0,bool1$lengths) #corrects in case the curve (d1) is always above threshold
     bool2 <- rle(with(rle(Ft_d1 > Ft_d1_max*tres[2]), rep(lengths == max(lengths[values]) & values, lengths)))
     rtable <- rbind(rtable,data.frame(type = "dynamic", start = bool1$length[1]+1, end = sum(bool2$length[1:2])))
     }

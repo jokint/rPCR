@@ -33,7 +33,7 @@ rpcr_calibrate(
 
 \item{roff}{relative cycle offset}
 
-\item{tres}{treshold}
+\item{tres}{threshold}
 
 \item{method}{method}
 

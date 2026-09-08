@@ -17,14 +17,14 @@ rpcr_plotCalibSummary <- function(data, type = "all", signal = "all", ...) {
     if (signal %in% c("all", "Rn")) {
       fig <- fig + 1
       figures[[fig]] <- rpcr_plotData(data,
-                                     title = "normalized flourescence\n ",
+                                     title = "normalized fluorescence\n ",
                                      signal = "Rn",
                                      ...)
     }
     if (signal %in% c("all", "deltaRn")) {
       fig <- fig + 1
       figures[[fig]] <- rpcr_plotData(data,
-                                     title = "normalized flourescence\n ",
+                                     title = "normalized fluorescence\n ",
                                      signal = "deltaRn",
                                      ...)
     }
@@ -33,14 +33,14 @@ rpcr_plotCalibSummary <- function(data, type = "all", signal = "all", ...) {
     if (signal %in% c("all", "Rn")) {
       fig <- fig + 1
       figures[[fig]] <- rpcr_plotBar(data,
-                                    title = "normalized flourescence\n ",
+                                    title = "normalized fluorescence\n ",
                                     signal = "Rn",
                                     ...)
     }
     if (signal %in% c("all", "deltaRn")) {
       fig <- fig + 1
       figures[[fig]] <- rpcr_plotBar(data,
-                                    title = "normalized flourescence\n ",
+                                    title = "normalized fluorescence\n ",
                                     signal = "deltaRn",
                                     ...)
     }

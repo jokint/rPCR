@@ -18,7 +18,7 @@ rpcr_calCip(
 \arguments{
 \item{x}{a vector of PCR amplification singlas}
 
-\item{qc_tres}{treshold}
+\item{qc_tres}{threshold}
 
 \item{detail}{output details}
 
