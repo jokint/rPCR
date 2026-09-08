@@ -2,7 +2,7 @@
 % Please edit documentation in R/rpcr_plotCalib.R
 \name{rpcr_plotCalib}
 \alias{rpcr_plotCalib}
-\title{Title}
+\title{Generating plot to validate calibration}
 \usage{
 rpcr_plotCalib(
   data = NULL,
@@ -28,7 +28,7 @@ rpcr_plotCalib(
 \arguments{
 \item{data}{data}
 
-\item{error}{???}
+\item{error}{displays errorbars if TRUE}
 
 \item{ctype}{cycle}
 
@@ -48,7 +48,7 @@ rpcr_plotCalib(
 
 \item{smooth}{smooth date}
 
-\item{ratio}{???}
+\item{ratio}{Ratio between plots}
 
 \item{color_target}{colors for target}
 
@@ -64,5 +64,5 @@ rpcr_plotCalib(
 plots
 }
 \description{
-Title
+Generating plot to validate calibration
 }

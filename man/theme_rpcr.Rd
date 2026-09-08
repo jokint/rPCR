@@ -4,7 +4,7 @@
 \alias{theme_rpcr}
 \title{theme for ggplot figures}
 \usage{
-theme_rpcr(base_size = 10, base_family = "sans")
+theme_rpcr(base_size = 8, base_family = "", type = "standard")
 }
 \arguments{
 \item{base_size}{font size}

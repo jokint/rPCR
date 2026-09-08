@@ -1,3 +1,6 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^documents$
+^Fig_panelD\.pdf$
+^SupplFig_gels\.pdf$
+^.*\.bundle$

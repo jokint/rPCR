@@ -8,8 +8,7 @@ rpcr_fitPlot(
   x,
   offset = 1,
   design = theme_rpcr(),
-  iso_color = c(grDevices::rgb(199, 235, 211, maxColorValue = 255), grDevices::rgb(255,
-    190, 190, maxColorValue = 255)),
+  iso_color = c("#00A087FF", "#E64B35FF"),
   aslist = FALSE,
   line = FALSE,
   ...
