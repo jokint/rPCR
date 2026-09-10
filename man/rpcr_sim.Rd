@@ -32,7 +32,8 @@ is varied when its name ("a", "ri", "re", "g") occurs in the string, as in
 the default "arireg"}
 }
 \value{
-a set of biased proportions for a range of parameter values
+a data.frame with one row per value of tprop and per combination
+  of the swept parameters, with columns tprop, a, ri, re, g and sprop
 }
 \description{
 Function to simulate a range of values for a specific parameters

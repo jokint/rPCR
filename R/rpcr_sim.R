@@ -10,7 +10,8 @@
 #'   is varied when its name ("a", "ri", "re", "g") occurs in the string, as in
 #'   the default "arireg"
 #'
-#' @return a set of biased proportions for a range of parameter values
+#' @return a data.frame with one row per value of tprop and per combination
+#'   of the swept parameters, with columns tprop, a, ri, re, g and sprop
 #' @export
 rpcr_sim <- function(tprop = c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1), a = 1, ri = 0, re = 0, steps = 10, g = 1, range = "arireg") {
 
@@ -27,7 +28,7 @@ rpcr_sim <- function(tprop = c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85,
     }) %>% purrr::map(dplyr::bind_rows)
   }) %>% purrr::map(dplyr::bind_rows)
 }) %>% purrr::map(dplyr::bind_rows)
-  return(res[[1]])
+  return(dplyr::bind_rows(res))
 }
 
 
