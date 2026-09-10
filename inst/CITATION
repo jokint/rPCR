@@ -1,0 +1,28 @@
+## Add doi = "..." to both entries once the article DOI and the Zenodo
+## software DOI have been assigned.
+
+citHeader("To cite ratioPCR in publications, cite the article; to cite the software itself, cite both entries:")
+
+bibentry(
+  bibtype = "Article",
+  title   = "ratioPCR: Mechanistically corrected real-time analysis of multi-template PCR",
+  author  = c(person("Jochen", "Kinter"),
+              person("Adeline", "Stiefvater"),
+              person("Sabrina", "Osterop"),
+              person("Michael", "Sinnreich")),
+  journal = "iScience",
+  year    = "2026",
+  note    = "In press; manuscript ISCIENCE-D-26-02393"
+)
+
+bibentry(
+  bibtype = "Manual",
+  title   = "ratioPCR: Ratiometric Quantification of Co-Amplified PCR Templates",
+  author  = c(person("Jochen", "Kinter"),
+              person("Adeline", "Stiefvater"),
+              person("Sabrina", "Osterop"),
+              person("Michael", "Sinnreich")),
+  year    = "2026",
+  note    = "R package version 0.1.0",
+  url     = "https://github.com/jokint/rPCR"
+)

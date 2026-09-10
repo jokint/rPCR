@@ -38,6 +38,8 @@ Imports:
     colorspace
 Suggests: 
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
 RoxygenNote: 7.3.3
+Config/testthat/edition: 3
