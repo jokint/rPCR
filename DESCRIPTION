@@ -1,15 +1,26 @@
 Package: ratioPCR
-Type: Package
-Title: What the Package Does (Title Case)
+Title: Ratiometric Quantification of Co-Amplified PCR Templates
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Authors@R: c(
+    person("Jochen", "Kinter", email = "j.kinter@unibas.ch",
+           role = c("aut", "cre")),
+    person("Adeline", "Stiefvater", role = "aut"),
+    person("Samira", "Osterop", role = "aut"),
+    person("Michael", "Sinnreich", role = "aut"))
+Description: Quantifies the relative abundance of templates that are amplified
+    together in a single real-time PCR reaction. The amplification bias between
+    templates is estimated from calibration reactions of known composition and
+    corrected with a mechanistic model of the amplification process, so that a
+    measured fluorescence ratio can be converted into a template ratio.
+    Provides import of instrument export files, baseline and efficiency
+    estimation, calibration fitting with quality control, forward and inverse
+    ratio estimation with batch processing, simulation of amplification curves,
+    and plotting helpers for calibration and results.
 License: file LICENSE
 Encoding: UTF-8
-LazyData: true
-RoxygenNote: 7.3.3
+URL: https://github.com/jokint/rPCR
+BugReports: https://github.com/jokint/rPCR/issues
+Depends: R (>= 4.1.0)
 Imports: 
     dplyr,
     ggh4x,
@@ -27,5 +38,8 @@ Imports:
     colorspace
 Suggests: 
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
+RoxygenNote: 7.3.3
+Config/testthat/edition: 3

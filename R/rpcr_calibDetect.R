@@ -3,6 +3,7 @@
 #' @param data amplification data
 #' @param percentage percentage (default = FALSE)
 #' @param qual qualifier for the calibration samples
+#' @param ... further arguments, ignored
 #'
 #' @return amplification data with tprop column for detected calibration samples
 #' @export

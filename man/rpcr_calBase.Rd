@@ -11,7 +11,7 @@ rpcr_calBase(df, offset = 1, tres = 0, ...)
 
 \item{offset}{offset for derivative calculation}
 
-\item{tres}{treshold}
+\item{tres}{threshold}
 
 \item{...}{other parameters}
 }

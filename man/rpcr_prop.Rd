@@ -2,7 +2,7 @@
 % Please edit documentation in R/rpcr_prop.R
 \name{rpcr_prop}
 \alias{rpcr_prop}
-\title{Title}
+\title{Calibrate apparent proportions}
 \usage{
 rpcr_prop(
   aprop,
@@ -15,28 +15,27 @@ rpcr_prop(
 )
 }
 \arguments{
-\item{aprop}{apperent ratios to be calibrated}
+\item{aprop}{apparent proportions to be calibrated}
 
-\item{calib}{Calibration parameters as named list like c(a = 1, ri = 0, re = 0)}
+\item{calib}{calibration parameters as a named vector, e.g.
+c(a = 1, ri = 0, re = 0, g = 1)}
 
-\item{lower}{lower limits}
+\item{lower}{lower limit passed to rpcr_inverse()}
 
-\item{upper}{upper limits}
+\item{upper}{upper limit passed to rpcr_inverse()}
 
 \item{prop}{proportion}
 
 \item{extend}{extended model}
 
 \item{...}{passing arguments}
-
-\item{df}{data}
 }
 \value{
-calibrated ratio
+calibrated proportions
 }
 \description{
-Title
+Calibrate apparent proportions
 }
 \examples{
-rpcr_prop(df = data.frame(0.4, 0.2), calib = c(a = 3, ri = 0, re = 0.05))
+rpcr_prop(c(0.4, 0.2), calib = c(a = 3, ri = 0, re = 0.05, g = 1))
 }

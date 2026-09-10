@@ -51,15 +51,17 @@ rpcr_dpeak <- function(df,bw=NULL,filter=NULL,plot=FALSE,scale=100,output=""){
   max <- dense[which(diff(sign(diff(dense$y)))==-2),]
   min <- dense[which(diff(sign(diff(dense$y)))==2),]
   max <- max[max$y>filter,]
-  if (length(max)!=0) {
-    peaks <- do.call(rbind,lapply(1:nrow(max),function(i){
+  if (nrow(max) > 0) {
+    peaks <- do.call(rbind,lapply(seq_len(nrow(max)),function(i){
     start <- utils::tail(min$x[min$x<max$x[i]],n=1)
     if (length(start)==0) start <- min(df)/2
     end <- min$x[min$x>max$x[i]][1]
     if (is.na(end)) end <- max(df)*2
     data.frame(start=start,peak=max$x[i],end=end,dvalue=dense[dense$x==max$x[i],]$y)
   }))
-}
+  } else {
+    peaks <- peak
+  }
   return(if (output == "details") list(peaks=peaks,dense=dense) else peaks)
 }
 

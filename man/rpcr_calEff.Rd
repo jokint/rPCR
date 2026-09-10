@@ -4,10 +4,13 @@
 \alias{rpcr_calEff}
 \title{Efficiency calculation}
 \usage{
-rpcr_calEff(df)
+rpcr_calEff(df, ...)
 }
 \arguments{
-\item{df}{vector eith amplification data}
+\item{df}{numeric vector of amplification data}
+
+\item{...}{further arguments, ignored (accepted so that the function can
+be called through rpcr_batch(), which passes id_col to every worker)}
 }
 \value{
 efficiency data

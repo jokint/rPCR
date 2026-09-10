@@ -30,7 +30,7 @@ rpcr_inverse <- function(y,a,ri,re,g,f=1,lower=-0.1,upper=1.1,...) {
     stats::uniroot((function (x) rpcr_simprop(x,a,ri,re,g,f,...) - y), lower = lower, upper = upper)[1]
 
     }, error = function(cond) {
-    message(cond)
+    message(conditionMessage(cond))
     return(NA)
   })
 }

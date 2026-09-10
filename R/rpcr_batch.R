@@ -19,8 +19,8 @@ rpcr_batch <- function(fun, df, id_col,...) {
       }
     }
   }, error = function(cond) {
-    message(paste(fun, ": Fehler in well", i))
-    message(cond)
+    message(paste(fun, ": error in well", i))
+    message(conditionMessage(cond))
     return(NA)
   }
   )

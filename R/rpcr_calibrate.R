@@ -7,7 +7,7 @@
 #' @param prop proportion setting
 #' @param extend extended model
 #' @param roff relative cycle offset
-#' @param tres treshold
+#' @param tres threshold
 #' @param method method
 #' @param model model
 #' @param qual calibration samples qualifier

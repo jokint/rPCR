@@ -2,6 +2,8 @@
 #'
 #' @param base_size font size
 #' @param base_family font family
+#' @param type theme variant: "standard" (default) draws axis titles, text,
+#'   line and ticks, "textless" blanks all four
 #'
 #' @return theme for ggplot
 #' @export
@@ -117,27 +119,29 @@ theme_plot <- function(base_size=6, base_family = "sans") {
            plot.margin=unit(c(10,5,5,5),"mm"),
            strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
            strip.text = element_text(face="bold")
-   ) # + scale_fill_rpcr() + scale_colour_rpcr()
+   )
   )
 }
 
-#' Title
+#' Discrete fill scale with the ratioPCR palette
 #'
+#' @param ... further arguments passed to ggplot2::discrete_scale()
 #' @return fill color scale
 #' @export
 #' @importFrom scales manual_pal
 #'
 scale_fill_rpcr <- function(...){
-  ggplot2::discrete_scale("fill","Publication",scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")))
+  ggplot2::discrete_scale(aesthetics = "fill", palette = scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
 
 }
 
-#' Title
+#' Discrete colour scale with the ratioPCR palette
 #'
-#' @return color sclae
+#' @param ... further arguments passed to ggplot2::discrete_scale()
+#' @return colour scale
 #' @export
 #' @importFrom scales manual_pal
 #'
 scale_colour_rpcr <- function(...){
-  ggplot2::discrete_scale("colour","Publication",scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")))
+  ggplot2::discrete_scale(aesthetics = "colour", palette = scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/rpcr_plotSim.R
 \name{rpcr_plotSim}
 \alias{rpcr_plotSim}
-\title{Title}
+\title{Plot simulated calibration curves}
 \usage{
 rpcr_plotSim(
   para = NULL,
@@ -39,10 +39,23 @@ rpcr_plotSim(
 \item{ccol}{color}
 
 \item{balpha}{alpha}
+
+\item{append}{optional list of two ggplot objects, as returned by an earlier
+rpcr_plotSim() call, to draw the new curves onto; NULL starts a new pair}
+
+\item{ratio}{relative height of the upper to the lower panel in the merged plot}
+
+\item{single}{logical; if TRUE a separate curve is drawn for each model
+parameter ("a", "ri", "g", "re") of every parameter set, if FALSE one curve
+is drawn per parameter set}
+
+\item{lincols}{vector of line colours, indexed by parameter set}
+
+\item{...}{further arguments, ignored}
 }
 \value{
-plot
+a list of the upper panel, the lower panel and the merged plot
 }
 \description{
-Title
+Plot simulated calibration curves
 }

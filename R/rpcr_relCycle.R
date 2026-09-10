@@ -1,8 +1,9 @@
 
-#' rpcr_rcycle
+#' Cycle numbers relative to the point of steepest increase
 #'
 #' @param df data
-#' @param offset offset
+#' @param id_col columns to use; the first names the fluorescence column whose
+#'   first derivative is maximised, and the cycle of that maximum becomes cycle zero
 #'
 #' @return relative cycle
 #' @export

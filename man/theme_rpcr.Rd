@@ -4,12 +4,15 @@
 \alias{theme_rpcr}
 \title{theme for ggplot figures}
 \usage{
-theme_rpcr(base_size = 10, base_family = "sans")
+theme_rpcr(base_size = 8, base_family = "", type = "standard")
 }
 \arguments{
 \item{base_size}{font size}
 
 \item{base_family}{font family}
+
+\item{type}{theme variant: "standard" (default) draws axis titles, text,
+line and ticks, "textless" blanks all four}
 }
 \value{
 theme for ggplot

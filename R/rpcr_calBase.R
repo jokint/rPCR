@@ -3,7 +3,7 @@
 #' @param df amplification data
 #' @param offset offset for derivative calculation
 #' @param ... other parameters
-#' @param tres treshold
+#' @param tres threshold
 #' @importFrom utils tail
 #'
 #' @return the corrected values
@@ -16,7 +16,7 @@ rpcr_calBase <- function(df, offset = 1, tres=0,...) {
   Ft_d1_max <- max(Ft_d1)
   if (length(tres)==1) tres <- c(tres,tres)
   bool1 <- rle(with(rle(Ft_d1 > Ft_d1_max*tres[1]), rep(lengths == max(lengths[values]) & values, lengths)))
-  bool1$lengths <- utils::tail(c(0,bool1$lengths),3) #corrects in case the curve (d1) is always above treshold
+  bool1$lengths <- utils::tail(c(0,bool1$lengths),3) #corrects in case the curve (d1) is always above threshold
   bool2 <- rle(with(rle(Ft_d1 > Ft_d1_max*tres[2]), rep(lengths == max(lengths[values]) & values, lengths)))
   range <- seq(bool1$length[1]+1, sum(bool2$length[1:2]))
 

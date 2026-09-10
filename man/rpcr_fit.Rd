@@ -21,7 +21,7 @@ rpcr_fit(
 )
 }
 \arguments{
-\item{df}{Data frame containing the flourescence data of the inclusion and exclusion probe}
+\item{df}{Data frame containing the fluorescence data of the inclusion and exclusion probe}
 
 \item{tres}{Threshold value to define a range of cycles used for aprop calculation when the range type is dynamic.}
 

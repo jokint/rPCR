@@ -1,16 +1,16 @@
-#' Function to simulate qasPCR
+#' Function to simulate ratioPCR
 #'
 #' @param tprop a theoretical proportion value or a list of proportion values
 #' @param a The alpha (a) value describes the difference in
 #' probe intensities (incl/excl)
-#' @param ri The ratio ri describes the crossreactivity of the intensity probe
+#' @param ri The ratio ri describes the cross-reactivity of the intensity probe
 #'
 #' The ratio can be between 0 and 1.
 #' ri = 0 -> The inclusion probe is specific there is no cross reactivity with the exclusion isoform
 #' ri = 1 -> The inclsuion probe is unspecific. The probe recognizes both isoforms equally.
 #' 0 > ri > 1 -> There is a certain specificity towards the inclusion isoform, but also recognizes the exclusion isoform.
 #'
-#' @param re The ratio re describes the crossreactivity of the exclusion probe
+#' @param re The ratio re describes the cross-reactivity of the exclusion probe
 #'
 #' The ratio can be between 0 and 1.
 #' re = 0 -> The exclusion probe is specific there is no cross reactivity with the inclusion isoform
@@ -18,6 +18,13 @@
 #' 0 > ri > 1 -> There is a certain specificity towards the exclusion isoform, but also recognizes the inclusion isoform.
 #'
 #' @param g parameter
+#' @param f additional model parameter, used by the extended (extend = TRUE) and
+#'   novel (novel = TRUE) model variants
+#' @param prop logical; if TRUE the model is evaluated in proportion space, if
+#'   FALSE the proportions are converted to ratios and evaluated in ratio space
+#' @param extend logical; select the extended model equation
+#' @param novel logical; select the novel parameterisation of the intensity term
+#' @param ... further arguments, ignored
 #'
 #' @return The simulated biased PSI
 #' @export

@@ -10,6 +10,8 @@ rpcr_calDer(df, offset = 1, ...)
 \item{df}{data for derivative calculation}
 
 \item{offset}{adding zero values}
+
+\item{...}{further arguments, ignored}
 }
 \value{
 derivative data
