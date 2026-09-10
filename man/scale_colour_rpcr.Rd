@@ -2,13 +2,16 @@
 % Please edit documentation in R/theme_rpcr.R
 \name{scale_colour_rpcr}
 \alias{scale_colour_rpcr}
-\title{Title}
+\title{Discrete colour scale with the ratioPCR palette}
 \usage{
 scale_colour_rpcr(...)
 }
+\arguments{
+\item{...}{further arguments passed to ggplot2::discrete_scale()}
+}
 \value{
-color sclae
+colour scale
 }
 \description{
-Title
+Discrete colour scale with the ratioPCR palette
 }

@@ -2,16 +2,19 @@
 % Please edit documentation in R/rpcr_filter.R
 \name{rpcr_filter}
 \alias{rpcr_filter}
-\title{Title}
+\title{Savitzky-Golay smoothing of an amplification curve}
 \usage{
 rpcr_filter(df, ...)
 }
 \arguments{
 \item{df}{input data}
+
+\item{...}{further arguments, ignored (accepted so that the function can
+be called through rpcr_batch(), which passes id_col to every worker)}
 }
 \value{
 filtered data
 }
 \description{
-Title
+Savitzky-Golay smoothing of an amplification curve
 }

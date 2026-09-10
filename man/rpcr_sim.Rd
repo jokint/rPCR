@@ -24,6 +24,12 @@ rpcr_sim(
 \item{re}{fitting parameter}
 
 \item{steps}{number of steps to be simulated}
+
+\item{g}{fitting parameter, passed to rpcr_simprop()}
+
+\item{range}{character string selecting which parameters are swept: a parameter
+is varied when its name ("a", "ri", "re", "g") occurs in the string, as in
+the default "arireg"}
 }
 \value{
 a set of biased proportions for a range of parameter values

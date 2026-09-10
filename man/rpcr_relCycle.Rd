@@ -2,18 +2,19 @@
 % Please edit documentation in R/rpcr_relCycle.R
 \name{rpcr_relCycle}
 \alias{rpcr_relCycle}
-\title{rpcr_rcycle}
+\title{Cycle numbers relative to the point of steepest increase}
 \usage{
 rpcr_relCycle(df, id_col)
 }
 \arguments{
 \item{df}{data}
 
-\item{offset}{offset}
+\item{id_col}{columns to use; the first names the fluorescence column whose
+first derivative is maximised, and the cycle of that maximum becomes cycle zero}
 }
 \value{
 relative cycle
 }
 \description{
-rpcr_rcycle
+Cycle numbers relative to the point of steepest increase
 }

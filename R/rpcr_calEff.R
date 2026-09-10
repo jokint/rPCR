@@ -1,6 +1,8 @@
 #' Efficiency calculation
 #'
-#' @param df vector eith amplification data
+#' @param df numeric vector of amplification data
+#' @param ... further arguments, ignored (accepted so that the function can
+#'   be called through rpcr_batch(), which passes id_col to every worker)
 #'
 #' @return efficiency data
 #' @export

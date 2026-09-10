@@ -1,4 +1,4 @@
-#' Title
+#' Plot simulated calibration curves
 #'
 #' @param para parameter for simulation
 #' @param ltype line type
@@ -9,8 +9,16 @@
 #' @param acol color
 #' @param ccol color
 #' @param balpha alpha
+#' @param append optional list of two ggplot objects, as returned by an earlier
+#'   rpcr_plotSim() call, to draw the new curves onto; NULL starts a new pair
+#' @param ratio relative height of the upper to the lower panel in the merged plot
+#' @param single logical; if TRUE a separate curve is drawn for each model
+#'   parameter ("a", "ri", "g", "re") of every parameter set, if FALSE one curve
+#'   is drawn per parameter set
+#' @param lincols vector of line colours, indexed by parameter set
+#' @param ... further arguments, ignored
 #'
-#' @return plot
+#' @return a list of the upper panel, the lower panel and the merged plot
 #' @export
 #'
 rpcr_plotSim <- function(para = NULL,

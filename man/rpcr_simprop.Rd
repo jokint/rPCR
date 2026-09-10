@@ -38,6 +38,18 @@ re = 1 -> The exclusion probe is unspecific. The probe recognizes both isoforms 
 0 > ri > 1 -> There is a certain specificity towards the exclusion isoform, but also recognizes the inclusion isoform.}
 
 \item{g}{parameter}
+
+\item{f}{additional model parameter, used by the extended (extend = TRUE) and
+novel (novel = TRUE) model variants}
+
+\item{prop}{logical; if TRUE the model is evaluated in proportion space, if
+FALSE the proportions are converted to ratios and evaluated in ratio space}
+
+\item{extend}{logical; select the extended model equation}
+
+\item{novel}{logical; select the novel parameterisation of the intensity term}
+
+\item{...}{further arguments, ignored}
 }
 \value{
 The simulated biased PSI

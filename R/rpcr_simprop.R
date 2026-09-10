@@ -18,6 +18,13 @@
 #' 0 > ri > 1 -> There is a certain specificity towards the exclusion isoform, but also recognizes the inclusion isoform.
 #'
 #' @param g parameter
+#' @param f additional model parameter, used by the extended (extend = TRUE) and
+#'   novel (novel = TRUE) model variants
+#' @param prop logical; if TRUE the model is evaluated in proportion space, if
+#'   FALSE the proportions are converted to ratios and evaluated in ratio space
+#' @param extend logical; select the extended model equation
+#' @param novel logical; select the novel parameterisation of the intensity term
+#' @param ... further arguments, ignored
 #'
 #' @return The simulated biased PSI
 #' @export

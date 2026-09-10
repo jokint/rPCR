@@ -2,13 +2,16 @@
 % Please edit documentation in R/theme_rpcr.R
 \name{scale_fill_rpcr}
 \alias{scale_fill_rpcr}
-\title{Title}
+\title{Discrete fill scale with the ratioPCR palette}
 \usage{
 scale_fill_rpcr(...)
+}
+\arguments{
+\item{...}{further arguments passed to ggplot2::discrete_scale()}
 }
 \value{
 fill color scale
 }
 \description{
-Title
+Discrete fill scale with the ratioPCR palette
 }

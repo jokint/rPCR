@@ -121,8 +121,9 @@ theme_plot <- function(base_size=6, base_family = "sans") {
   )
 }
 
-#' Title
+#' Discrete fill scale with the ratioPCR palette
 #'
+#' @param ... further arguments passed to ggplot2::discrete_scale()
 #' @return fill color scale
 #' @export
 #' @importFrom scales manual_pal
@@ -132,9 +133,10 @@ scale_fill_rpcr <- function(...){
 
 }
 
-#' Title
+#' Discrete colour scale with the ratioPCR palette
 #'
-#' @return color sclae
+#' @param ... further arguments passed to ggplot2::discrete_scale()
+#' @return colour scale
 #' @export
 #' @importFrom scales manual_pal
 #'

@@ -5,6 +5,10 @@
 #' @param ri fitting parameter
 #' @param re fitting parameter
 #' @param steps number of steps to be simulated
+#' @param g fitting parameter, passed to rpcr_simprop()
+#' @param range character string selecting which parameters are swept: a parameter
+#'   is varied when its name ("a", "ri", "re", "g") occurs in the string, as in
+#'   the default "arireg"
 #'
 #' @return a set of biased proportions for a range of parameter values
 #' @export

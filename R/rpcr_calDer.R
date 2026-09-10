@@ -2,6 +2,7 @@
 #'
 #' @param df data for derivative calculation
 #' @param offset adding zero values
+#' @param ... further arguments, ignored
 #'
 #' @return derivative data
 #' @export

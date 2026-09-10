@@ -12,6 +12,8 @@ rpcr_calibDetect(data, qual = "Cal", percentage = FALSE, ...)
 \item{qual}{qualifier for the calibration samples}
 
 \item{percentage}{percentage (default = FALSE)}
+
+\item{...}{further arguments, ignored}
 }
 \value{
 amplification data with tprop column for detected calibration samples
