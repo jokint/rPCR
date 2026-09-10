@@ -6,7 +6,7 @@
 #' @return filtered data
 #' @export
 #'
-rpcr_filter <- function(df) {
+rpcr_filter <- function(df, ...) {
   df <- signal::sgolayfilt(df)
   return(as.numeric(df))
 }

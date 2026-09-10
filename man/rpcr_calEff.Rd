@@ -4,7 +4,7 @@
 \alias{rpcr_calEff}
 \title{Efficiency calculation}
 \usage{
-rpcr_calEff(df)
+rpcr_calEff(df, ...)
 }
 \arguments{
 \item{df}{vector eith amplification data}

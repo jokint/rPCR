@@ -15,8 +15,8 @@ rpcr_calibQC <- function(df, tprop, ... ) {
   out <- list()
 
   ### calculating apparent proportion aprop
-  res_fit <- rpcr_calibrate(df,details=TRUE,...)
-  cdata <- res_fit$details$summary
+  res_fit <- rpcr_calibrate(df, output = "details", ...)
+  cdata <- res_fit$summary
 
   out <- list()
   for (target in unique(cdata$target)) {

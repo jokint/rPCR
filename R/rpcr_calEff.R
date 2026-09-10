@@ -4,7 +4,7 @@
 #'
 #' @return efficiency data
 #' @export
-rpcr_calEff <- function(df) {
+rpcr_calEff <- function(df, ...) {
   len <- length(df)
   df <- data.frame(data = df, eff = 0)
   df[1:(len - 1 ), 2] <-

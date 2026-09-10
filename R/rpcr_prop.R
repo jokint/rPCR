@@ -25,7 +25,7 @@ rpcr_prop <- function(aprop,calib=c(1,0,0,1,0),lower = -0.1, upper = 1.1,prop = 
     return(unlist(cprop))
   },
   error = function(cond) {
-    message(cond)
+    message(conditionMessage(cond))
     message(paste("Ratio calculation failed:"))
     return(NA)
   })

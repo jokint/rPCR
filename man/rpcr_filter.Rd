@@ -4,7 +4,7 @@
 \alias{rpcr_filter}
 \title{Title}
 \usage{
-rpcr_filter(df)
+rpcr_filter(df, ...)
 }
 \arguments{
 \item{df}{input data}

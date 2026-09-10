@@ -68,7 +68,7 @@ rpcr_batchFit <- function(data,
     }
   }, error = function(cond) {
     message(paste("rpcr_batchFit error in well", well))
-    message(cond)
+    message(conditionMessage(cond))
     return(NA)
   })
   rownames(out) <- NULL

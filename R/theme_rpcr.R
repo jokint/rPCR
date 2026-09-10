@@ -128,7 +128,7 @@ theme_plot <- function(base_size=6, base_family = "sans") {
 #' @importFrom scales manual_pal
 #'
 scale_fill_rpcr <- function(...){
-  ggplot2::discrete_scale("fill","Publication",scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")))
+  ggplot2::discrete_scale("fill","Publication",scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
 
 }
 
@@ -139,5 +139,5 @@ scale_fill_rpcr <- function(...){
 #' @importFrom scales manual_pal
 #'
 scale_colour_rpcr <- function(...){
-  ggplot2::discrete_scale("colour","Publication",scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")))
+  ggplot2::discrete_scale("colour","Publication",scales::manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
 }

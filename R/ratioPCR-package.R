@@ -4,6 +4,7 @@
 ## usethis namespace: start
 #' @importFrom magrittr %>%
 #' @importFrom stats na.omit
+#' @importFrom stats as.formula
 #' @importFrom tidyr pivot_wider
 ## usethis namespace: end
 NULL
