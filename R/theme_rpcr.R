@@ -2,6 +2,8 @@
 #'
 #' @param base_size font size
 #' @param base_family font family
+#' @param type theme variant: "standard" (default) draws axis titles, text,
+#'   line and ticks, "textless" blanks all four
 #'
 #' @return theme for ggplot
 #' @export

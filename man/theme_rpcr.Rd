@@ -10,6 +10,9 @@ theme_rpcr(base_size = 8, base_family = "", type = "standard")
 \item{base_size}{font size}
 
 \item{base_family}{font family}
+
+\item{type}{theme variant: "standard" (default) draws axis titles, text,
+line and ticks, "textless" blanks all four}
 }
 \value{
 theme for ggplot
