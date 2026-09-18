@@ -4,3 +4,5 @@
 ^Fig_panelD\.pdf$
 ^SupplFig_gels\.pdf$
 ^.*\.bundle$
+^CITATION\.cff$
+^\.zenodo\.json$
