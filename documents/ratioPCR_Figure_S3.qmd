@@ -25,12 +25,10 @@ The supplementary legends are complete in the supplied legend file and are quote
 >
 > (B) Experimental validation of probe specificity using synthetic single-isoform templates. Left panels: normalised fluorescence (Rn) amplification curves from reactions containing only the exclusion template (left) or only the inclusion template (right), measured with each probe for all three assays. Right panel: endpoint ΔRn fluorescence values for all four probe–template combinations (exclusion probe on exclusion template, exclusion probe on inclusion template, inclusion probe on inclusion template, inclusion probe on exclusion template). Inclusion probes generate no detectable signal on exclusion templates across all three assays. Exclusion probes show assay-dependent cross-reactivity on inclusion templates: negligible for KIF13A and SYNE1, but clearly measurable for NUMA1, consistent with the thermodynamic predictions in panel A.
 
-<<<BLOCK
 | Panel | Content |
 |---------------------|---------------------------|
 | A | Predicted −ΔG matrix, probe × template × strand |
 | B | Rn curves and endpoint ΔRn on single-isoform templates |
-BLOCK>>>
 
 # Setup
 

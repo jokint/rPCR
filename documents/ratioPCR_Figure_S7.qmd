@@ -15,13 +15,11 @@ execute:
   message: false
 ---
 
-<<<BLOCK
 <!-- ============================================================= -->
 <!-- ratioPCR_Figure_S7.qmd                                         -->
 <!-- Self-contained rebuild of Supplementary Figure S7.             -->
 <!-- Chunk bodies transplanted; repairs listed at the end.          -->
 <!-- ============================================================= -->
-BLOCK>>>
 
 # Figure legend
 
