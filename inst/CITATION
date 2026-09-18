@@ -1,5 +1,5 @@
-## Add doi = "..." to both entries once the article DOI and the Zenodo
-## software DOI have been assigned.
+## The software DOI below is the Zenodo DOI reserved for version 0.1.0. Add
+## doi = "..." to the Article entry once the iScience DOI has been assigned.
 
 citHeader("To cite ratioPCR in publications, cite the article; to cite the software itself, cite both entries:")
 
@@ -24,5 +24,6 @@ bibentry(
               person("Michael", "Sinnreich")),
   year    = "2026",
   note    = "R package version 0.1.0",
+  doi     = "10.5281/zenodo.22834257",
   url     = "https://github.com/jokint/rPCR"
 )

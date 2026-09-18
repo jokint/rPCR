@@ -1,0 +1,53 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite both the article and the software itself."
+title: "ratioPCR: Ratiometric Quantification of Co-Amplified PCR Templates"
+abstract: "Quantifies the relative abundance of templates that are amplified together in a single real-time PCR reaction. The amplification bias between templates is estimated from calibration reactions of known composition and corrected with a mechanistic model of the amplification process, so that a measured fluorescence ratio can be converted into a template ratio. The package provides import of instrument export files, baseline and efficiency estimation, calibration fitting with quality control, forward and inverse ratio estimation with batch processing, simulation of amplification curves, and plotting helpers. This deposit also contains the thirteen Quarto documents that build the manuscript figures from the source data."
+type: software
+authors:
+  - family-names: Kinter
+    given-names: Jochen
+    affiliation: "University of Basel"
+  - family-names: Stiefvater
+    given-names: Adeline
+    affiliation: "University of Basel"
+  - family-names: Osterop
+    given-names: Samira
+    affiliation: "University of Basel"
+  - family-names: Sinnreich
+    given-names: Michael
+    affiliation: "University of Basel"
+version: 0.1.0
+date-released: "2026-09-18"
+doi: 10.5281/zenodo.22834257
+license: PolyForm-Noncommercial-1.0.0
+repository-code: https://github.com/jokint/rPCR
+url: https://github.com/jokint/rPCR
+keywords:
+  - real-time PCR
+  - multi-template amplification
+  - amplification bias
+  - isoform ratio
+  - alternative splicing
+  - calibration
+  - mechanistic model
+  - digital PCR
+  - R package
+preferred-citation:
+  type: article
+  title: "ratioPCR: Mechanistically corrected real-time analysis of multi-template PCR"
+  authors:
+    - family-names: Kinter
+      given-names: Jochen
+      affiliation: "University of Basel"
+    - family-names: Stiefvater
+      given-names: Adeline
+      affiliation: "University of Basel"
+    - family-names: Osterop
+      given-names: Samira
+      affiliation: "University of Basel"
+    - family-names: Sinnreich
+      given-names: Michael
+      affiliation: "University of Basel"
+  journal: iScience
+  year: 2026
+  notes: "In press; manuscript ISCIENCE-D-26-02393"

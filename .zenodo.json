@@ -1,0 +1,46 @@
+{
+  "upload_type": "software",
+  "title": "ratioPCR: Ratiometric Quantification of Co-Amplified PCR Templates",
+  "description": "<p>Quantifies the relative abundance of templates that are amplified together in a single real-time PCR reaction. The amplification bias between templates is estimated from calibration reactions of known composition and corrected with a mechanistic model of the amplification process, so that a measured fluorescence ratio can be converted into a template ratio. The package provides import of instrument export files, baseline and efficiency estimation, calibration fitting with quality control, forward and inverse ratio estimation with batch processing, simulation of amplification curves, and plotting helpers. This deposit also contains the thirteen Quarto documents that build the manuscript figures from the source data.</p>",
+  "version": "0.1.0",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Kinter, Jochen",
+      "affiliation": "University of Basel"
+    },
+    {
+      "name": "Stiefvater, Adeline",
+      "affiliation": "University of Basel"
+    },
+    {
+      "name": "Osterop, Samira",
+      "affiliation": "University of Basel"
+    },
+    {
+      "name": "Sinnreich, Michael",
+      "affiliation": "University of Basel"
+    }
+  ],
+  "license": "polyform-noncommercial-1.0.0",
+  "keywords": [
+    "real-time PCR",
+    "multi-template amplification",
+    "amplification bias",
+    "isoform ratio",
+    "alternative splicing",
+    "calibration",
+    "mechanistic model",
+    "digital PCR",
+    "R package"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/jokint/rPCR",
+      "relation": "isSupplementTo",
+      "scheme": "url",
+      "resource_type": "software"
+    }
+  ],
+  "notes": "Accompanies the article \"ratioPCR: Mechanistically corrected real-time analysis of multi-template PCR\" (iScience, in press; manuscript ISCIENCE-D-26-02393). Add the article DOI as a related identifier (relation: isSupplementTo) once it is assigned."
+}

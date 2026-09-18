@@ -18,7 +18,7 @@ Description: Quantifies the relative abundance of templates that are amplified
     and plotting helpers for calibration and results.
 License: file LICENSE
 Encoding: UTF-8
-URL: https://github.com/jokint/rPCR
+URL: https://github.com/jokint/rPCR, https://doi.org/10.5281/zenodo.22834257
 BugReports: https://github.com/jokint/rPCR/issues
 Depends: R (>= 4.1.0)
 Imports: 

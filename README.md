@@ -1,5 +1,7 @@
 # ratioPCR
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22834257.svg)](https://doi.org/10.5281/zenodo.22834257)
+
 Ratiometric quantification of co-amplified PCR templates.
 
 `ratioPCR` estimates the relative abundance of two templates amplified together
@@ -102,3 +104,15 @@ the corresponding author (j.kinter@unibas.ch).
 ## Citation
 
 `citation("ratioPCR")` gives the article and the software entry.
+
+## Citation
+
+Cite the article for the method and the Zenodo record for the software:
+
+- Kinter J., Stiefvater A., Osterop S., Sinnreich M. *ratioPCR: Mechanistically corrected real-time
+  analysis of multi-template PCR.* iScience, in press (manuscript ISCIENCE-D-26-02393).
+- Kinter J., Stiefvater A., Osterop S., Sinnreich M. *ratioPCR: Ratiometric Quantification of
+  Co-Amplified PCR Templates*, version 0.1.0, 2026. <https://doi.org/10.5281/zenodo.22834257>
+
+`citation("ratioPCR")` in R returns both entries; `CITATION.cff` carries the same metadata for
+GitHub and reference managers.
