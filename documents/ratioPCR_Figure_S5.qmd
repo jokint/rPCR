@@ -1,0 +1,500 @@
+---
+title: "ratioPCR Figure S5 — Kinetic simulations under idealised conditions and across multiple sources of signal bias"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+> **Supplementary Figure S5: Kinetic simulations under idealised conditions and across multiple sources of signal bias**
+>
+> (A–C) Simulations under idealised conditions with equal rehybridisation and heteroduplex formation rates for both templates and no probes. Amplicon concentrations for targets A (left) and B (right) are shown over PCR cycles (A). Under these conditions, the relationship between amplicon A and amplicon B concentrations is strictly linear across all input ratios (B), and the apparent template proportion remains constant throughout amplification (C), confirming that ratio distortion requires asymmetric kinetics and does not arise from amplification per se.
+>
+> (D) Overview of the six sources of signal bias incorporated in the multi-bias simulations. (i) Unequal rehybridisation rates between templates lead to asymmetric amplification efficiency (kA \> kB). (ii) Heteroduplex formation kinetics drive progressive convergence of measured ratios toward equimolarity (kB \> kAB). (iii) Probe affinity differences between the two template-specific probes cause cycle-dependent signal drift (kA \> kB). (iv) Probe cross-reactivity causes partial misassignment of signal between the two fluorescence channels. (v) Fluorophore intensity differences and instrument sensitivity cause signal scaling imbalance between channels. (vi) Background fluorescence and measurement noise distort the observed signal ratios.
+>
+> (E) Multilevel simulation output showing the cumulative effect of each additional bias source on measured fluorescence signals and derived ratios. Columns from left to right show amplicon concentrations, released dye levels (proportional to probe cleavage events), simulated normalised fluorescence (simRn), background-subtracted signal (simRnΔ), and simRnΔ with added measurement noise (simRnΔ + noise). For each bias source (rows i–vi), four output representations are shown: amplification curves (top row), slope plots showing the relationship between signals A and B (second row), ratio plots showing apparent proportion over cycles (third row), and the deviation of the final measured proportion from the input proportion as a function of template proportion (bottom row). Each successive bias source introduces additional, characteristic distortion of the apparent ratio, demonstrating that multiple independent mechanisms contribute to the overall measurement error observed in multi-template PCR.
+
+## Simulation provenance and choice of scenario directory
+
+As for Figure 2, the OpenModelica model is not re-run at render time; the stored outputs under `documents/rPCRsim/` are read.
+
+| Panel | Scenario directory | Why |
+|----------------|-----------------------------------------|----------------|
+| A–C | `Sim_standard` | The idealised case: `ProbeA = ProbeB = 0` (no probes), `hetero_k1 = rehybA_k1 = rehybB_k1 = 1×10⁶ M⁻¹s⁻¹` (fully symmetric re-annealing), nested over `startRatio = seq(0, 1, 0.1)`. This is exactly the "equal rehybridisation and heteroduplex formation rates for both templates and no probes" condition of the legend. |
+| E | `Sim_complex` | The multi-bias case: probes present at 300 nM, `ProbeA_k1 = 4×10⁵` against `ProbeB_k1 = 3×10⁵`, `hetero_k1 = 5×10⁵`, `rehybA_k1 = 1.5×10⁶` against `rehybB_k1 = 1×10⁶`, `sFluoA = 5×10⁷` against `sFluoB = 1×10⁷`, `bFluoA = 2.5`, and inclusion-probe cross-reactivity `Aa_PB_k1 = 2×10⁴`. Run at `stepSize = 0.5` over `startRatio = seq(0, 1, 0.1)`. |
+
+# Setup
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+source(file.path(pp, "documents", "scripts", "omPCR_functions.R"))
+# REPAIR (render fix): rpcr_plotData() -- and rpcr_plotPanel(), which calls it --
+# expects the package's internal fluorescence contract: FA/FB for signal = "Rn"
+# and bFA/bFB for the baseline-subtracted signal. Those are the columns
+# rpcr_wrap() creates for instrument data. omTrans() names the simulated
+# equivalents Fincl/Fexcl and bFincl/bFexcl, so the two contracts must be
+# bridged explicitly before any package plotting function is called.
+# REPAIR (render fix): ratioPCR 0.1.0 maps `sample` onto a CONTINUOUS colour
+# scale in rpcr_plotData() (ggplot2::scale_colour_gradientn, R/rpcr_plotData.R:246),
+# but the sample labels are character ("Cal0" ... "Cal100"). The coercion that used
+# to bridge this lives commented-out in the package at R/rpcr_plotData.R:62-67,
+# marked "removed 30.06.2026", so the call now aborts with "Discrete value supplied
+# to a continuous scale". Restoring the numeric column reproduces the pre-removal
+# behaviour without modifying the installed package.
+rpcr_sim_contract <- function(df) {
+  df$FA  <- df$Fincl
+  df$FB  <- df$Fexcl
+  df$bFA <- df$bFincl
+  df$bFB <- df$bFexcl
+  # Same contract gap on the colour aesthetic: omTrans() writes sample as
+  # paste0("Cal", par_startRatio * 100), a character, while rpcr_plotData() maps
+  # `sample` onto a continuous gradient (see the note in the setup chunk).
+  df$sample <- as.numeric(gsub("[^0-9.]", "", as.character(df$sample)))
+  df
+}
+
+
+library(ggplot2)
+library(ratioPCR)
+
+# Paths. REPAIR: the source script built these from a hard-coded /scicore/...
+# prefix; here they derive from here::here(). fpath is the Simulations
+# subfolder used by all simulation figures, created if absent so that psave()
+# cannot fail on a missing directory.
+path_sim <- file.path(pp, "documents", "rPCRsim")
+fpath    <- file.path(pp, "documents", "figures")
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+sim_standard <- "Sim_standard"
+sim_complex  <- "Sim_complex"
+
+# Re-simulation switch, FALSE by default: OpenModelica and the rPCR_03 model
+# tree are not available at render time. REPAIR: in the source script the
+# omPCRBatch() call of the "Complex" block was live at top level and would
+# abort the render. No Quarto `params:` block is used.
+resimulate <- as.logical(Sys.getenv("RPCR_RESIMULATE", "FALSE"))
+simModel   <- "rPCR_03"
+simPath    <- file.path(Sys.getenv("HOME"), "openmodelica", simModel)
+
+# Panel theme and the shared empty plot used by the panel-E grid. Both
+# objects were originally defined in an interactive session and are set
+# up directly here.
+theme_figure <- theme(
+  axis.text.y = element_text(size = 5, face = "plain"),
+  axis.text.x = element_text(size = 5),
+  panel.grid.major = element_blank(),
+  axis.text = element_text(size = 5),
+  axis.title = element_text(face = "plain"),
+  axis.title.y = element_text(vjust = 0),
+  strip.placement = "outside",
+  strip.text.y = element_text(vjust = 0, size = 8),
+  plot.margin = margin(0, 0, 0, 0, "cm"))
+
+basic_plot <- ggplot() + theme_rpcr() +
+  scale_colour_gradientn(colours = rpcr_col_probe) +
+  theme_figure + theme(legend.position = "none")
+
+# Standard kinetic parameter set. Panel E applies its bias overrides on
+# top of this set.
+stdPara <- data.frame(
+  tolerance = 1e-8,
+  cycle_max = 45,
+  cycle_time = 45,
+  startPrimer = 500 * 1e-9, # nM
+  startTemplate = copytoconc(1e6), # copies
+  startRatio = 0.5,
+  ProbeA = 0 * 1e-9, # nM
+  ProbeB = 0 * 1e-9, # nM
+  Signal_A = 0,
+  Signal_B = 0,
+  Primer_k1 = 2e5,
+  # literature: 5e5 /M s
+  Primer_k2 = 1e-3,
+  # literature: 1e-4 /s
+  ProbeA_k1 = 3e5,
+  ProbeA_k2 = 1e-3,
+  ProbeB_k1 = 3e5,
+  ProbeB_k2 = 1e-3,
+  hetero_k1 = 1e6,
+  hetero_k2 = 1e-4,
+  rehybA_k1 = 1e6,
+  rehybA_k2 = 1e-4,
+  rehybB_k1 = 1e6,
+  rehybB_k2 = 1e-4,
+  Polymerase = 2e-7,
+  RdsPoly_k1 = 1e6,
+  RdsPoly_k2 = 1e-3,
+  RiniPoly_k1 = 1e6,
+  RiniPoly_k2 = 1e-3,
+  RextPoly_k1 = 60,
+  sFluoA = 50e6,
+  sFluoB = 50e6,
+  bFluoA = 1,
+  bFluoB = 1,
+  lFluoA = 0,
+  lFluoB = 0,
+  Aa_PB_k1 = 1e-20,
+  Aa_PB_k2 = 1e20,
+  Ba_PA_k1 = 1e-20,
+  Ba_PA_k2 = 1e20
+)
+
+stdPara$stopTime <- stdPara$cycle_time * stdPara$cycle_max
+stdPara$stepSize <- stdPara$cycle_time
+
+results_standard <- readRDS(file.path(path_sim, sim_standard, "results", "results.rds"))
+results_complex  <- readRDS(file.path(path_sim, sim_complex,  "results", "results.rds"))
+```
+
+The parameter sets recorded next to the two result files are printed here so that the document reports the simulations it reads.
+
+```{r}
+#| label: simulation-settings
+
+sim_settings <- do.call(rbind, lapply(c(sim_standard, sim_complex), function(s) {
+  x <- read.delim(file.path(path_sim, s, "settings.txt"))
+  data.frame(scenario = s,
+             x[, c("ProbeA", "ProbeB", "ProbeA_k1", "ProbeB_k1", "hetero_k1",
+                   "rehybA_k1", "rehybB_k1", "sFluoA", "sFluoB", "bFluoA",
+                   "Aa_PB_k1", "stepSize")])
+}))
+knitr::kable(
+  sim_settings,
+  caption = paste("settings.txt for the idealised (Sim_standard) and multi-bias",
+                  "(Sim_complex) scenarios. The columns are the parameters that",
+                  "differ between them, i.e. the six bias sources of panel D plus",
+                  "the integration step size. startRatio is swept from 0 to 1 in",
+                  "both cases and is therefore not shown.")
+)
+```
+
+------------------------------------------------------------------------
+
+# Panels A–C — Idealised conditions
+
+Panels A–C establish the negative control for the whole kinetic argument: with no probes and identical rehybridisation and heteroduplex association rates for both templates, multi-template amplification introduces no ratio distortion of its own. Amplicon concentrations for the two targets rise in parallel (A), the amplicon A against amplicon B relationship is a straight line for every input ratio (B), and the apparent proportion ψₐ is flat across all cycles (C). Any distortion observed in Figure 2 must therefore come from the asymmetry introduced there, not from the amplification process.
+
+`rpcr_plotPanel()` returns the standard simulation views in a fixed order; the "Standard" block arranges the first four, of which the first three are panels A, B and C.
+
+```{r}
+#| label: figS5-panels-abc
+#| fig-cap: "Panels A-C. Output of rpcr_plotPanel() on the idealised Sim_standard batch, coloured by input proportion: amplification curves for both amplicons (A), amplicon A against amplicon B (B), apparent proportion over cycles (C). The fourth element (final against input proportion) is shown for completeness and is not part of the published panel set."
+#| fig-width: 10
+#| fig-height: 3
+
+para <- stdPara
+
+title   <- "standard"
+expName <- paste0("Sim_", title)
+
+nlist <- list(startRatio = seq(0,1,0.1))
+
+if (resimulate) {
+  results_standard <- omPCRBatch(simModel,
+                                 simPath,
+                                 override = para,
+                                 nestedList = nlist,
+                                 logdir = expName,
+                                 project = title,
+                                 details = FALSE,
+                                 expName = expName)
+}
+
+df0 <- omTrans(results_standard)
+df0 <- rpcr_sim_contract(df0)
+
+plots <- rpcr_plotPanel(df0, wline = 0.35)
+
+figure <- ggarrange(plotlist = plots,
+                    ncol = 4,
+                    labels = c("A","B","C","D"),
+                    common.legend = TRUE,
+                    legend="none",
+                    widths = c(2,1,1,1),
+                    font.label=list(color="black",size=10))
+
+figure
+```
+
+The strict linearity of panel B and the flatness of panel C are properties of the simulation, not of the plotting; they are quantified here from the same `df0` so the document states the result rather than asserting it.
+
+```{r}
+#| label: figS5-linearity-check
+
+end_cycle <- max(df0$cycle)
+check <- do.call(rbind, lapply(split(df0, df0$well), function(w) {
+  w <- w[order(w$cycle), ]
+  tprop <- unique(w$par_startRatio)
+  fit_r2 <- if (length(unique(w$Fexcl)) > 2 && length(unique(w$Fincl)) > 2) {
+    summary(lm(Fincl ~ Fexcl, data = w))$r.squared
+  } else NA_real_
+  data.frame(
+    input_proportion = tprop,
+    r2_amplicon_A_vs_B = fit_r2,
+    psi_a_range_over_cycles = diff(range(w$USI[w$cycle >= 10], na.rm = TRUE)),
+    psi_a_final = w$USI[w$cycle == end_cycle][1]
+  )
+}))
+check <- check[order(check$input_proportion), ]
+knitr::kable(check, digits = 6, row.names = FALSE,
+             caption = paste("Idealised scenario, per input proportion: coefficient of",
+                             "determination of the amplicon A against amplicon B",
+                             "relationship (panel B), the range spanned by the apparent",
+                             "proportion over cycles 10 to", end_cycle, "(panel C), and",
+                             "the final apparent proportion. Rows at input proportion 0",
+                             "and 1 have one amplicon absent and no fit is defined."))
+```
+
+------------------------------------------------------------------------
+
+# Panel D — Overview of the six bias sources
+
+Panel D is a **schematic overview** and has no R source in this repository. It summarises the six mechanisms that the multi-bias simulation of panel E superimposes: (i) unequal rehybridisation rates between templates, giving asymmetric amplification efficiency; (ii) heteroduplex formation kinetics, driving convergence of the measured ratio toward equimolarity; (iii) probe affinity differences, causing cycle-dependent signal drift; (iv) probe cross-reactivity, misassigning signal between the two fluorescence channels; (v) fluorophore intensity and instrument sensitivity differences, scaling the two channels unequally; and (vi) background fluorescence and measurement noise.
+
+The drawing was prepared outside R and is not generated from code here. Its content is nevertheless traceable to model parameters: each of the six sources corresponds to a specific override in the `Sim_complex` parameter set, listed in the panel E section below.
+
+------------------------------------------------------------------------
+
+# Panel E — Multilevel bias cascade
+
+Panel E follows the same simulated reactions through five successive representations of the signal, from the quantity the model integrates to the quantity an instrument reports: amplicon concentration (`totalA`/`totalB`) → released dye, proportional to probe cleavage (`signalA.c`/`signalB.c`) → simulated normalised fluorescence simRn (`FluoA`/`FluoB`) → background-subtracted simRnΔ (`FluoAdelta`/`FluoBdelta`) → simRnΔ with added measurement noise (`FluoARndelta`/`FluoBRndelta`). Each column is one representation; the rows are the four standard views — amplification curves for signal A, amplification curves for signal B, the slope plot of A against B, and the apparent proportion over cycles. Reading across a row shows how much of the apparent distortion is introduced *after* the amplicon concentrations themselves, by probe kinetics, channel scaling and background subtraction.
+
+```{r}
+#| label: figS5-panel-e-parameters
+
+para <- stdPara
+
+para$ProbeA = 300 * 1e-9
+para$ProbeB = 300 * 1e-9
+para$ProbeA_k1 <- 4e5
+para$hetero_k1 <- 5e5
+para$rehybA_k1 <- 1.5e6
+para$sFluoA <- 50e6
+para$sFluoB = 10e6
+para$bFluoA <- 2.5
+para$Aa_PB_k1 <- 2e4
+para$Aa_PB_k2 <- 1e-3
+
+title <- "complex"
+para$stepSize <- 0.5
+expName <- paste0("Sim_", title)
+
+nlist <- list(startRatio = seq(0,1,0.1))
+
+if (resimulate) {
+  results_complex <- omPCRBatch(simModel,
+                                simPath,
+                                override = para,
+                                nestedList = nlist,
+                                logdir = expName,
+                                project = title,
+                                details = FALSE,
+                                expName = expName)
+}
+
+bias_map <- data.frame(
+  source = c("(i) unequal rehybridisation rates",
+             "(ii) heteroduplex formation kinetics",
+             "(iii) probe affinity difference",
+             "(iv) probe cross-reactivity",
+             "(v) fluorophore intensity difference",
+             "(vi) background and measurement noise"),
+  parameter = c("rehybA_k1 vs rehybB_k1", "hetero_k1", "ProbeA_k1 vs ProbeB_k1",
+                "Aa_PB_k1 / Aa_PB_k2", "sFluoA vs sFluoB, bFluoA",
+                "rnorm(sd = bFluo/sdfac) added in R"),
+  value = c(paste(para$rehybA_k1, "vs", para$rehybB_k1),
+            format(para$hetero_k1),
+            paste(para$ProbeA_k1, "vs", para$ProbeB_k1),
+            paste(para$Aa_PB_k1, "/", para$Aa_PB_k2),
+            paste(para$sFluoA, "vs", para$sFluoB, "; bFluoA =", para$bFluoA),
+            "sdfac = 200, seed = 2025")
+)
+knitr::kable(bias_map,
+             caption = paste("The six bias sources of panel D as they are realised in the",
+                             "Sim_complex parameter set. Sources (i) to (v) are model",
+                             "parameters; source (vi) is added to the simulated signal in R."))
+```
+
+::: callout-important
+## Rows i–vi of the published panel
+
+The legend describes panel E as a grid whose **rows i–vi are the cumulative bias sources**, each with four output representations, i.e. six blocks of the kind built below. **One** such block is built for the fully cumulative parameter set (all six sources active) stored in `Sim_complex`. No loop over intermediate parameter sets exists in the repository, and `documents/rPCRsim/` contains no directories holding the five intermediate result sets under names that identify them as bias steps i–v. (`Sim_Hetero_asyProbe_full` is a full-PCR run with asymmetric probe kinetics and asymmetric rehybridisation, and is the closest candidate for an intermediate step, but it uses `rehybB_k1 = 2×10⁶` and different probe concentrations, so it is not simply "the complex set minus one bias".)
+
+What this document reproduces is therefore the final, fully cumulative block of panel E. Rebuilding rows i–v requires re-running the model with the intermediate parameter sets, which is a simulation task, not a plotting one.
+:::
+
+```{r}
+#| label: figS5-panel-e
+#| fig-cap: "Panel E, cumulative bias configuration. Columns: amplicon concentration, released dye, simRn, simRnDelta, simRnDelta + noise. Rows: amplification curves for signal A, amplification curves for signal B, slope plot of signal A against signal B, apparent proportion over cycles. Colour encodes the input template proportion. Each amplification-curve panel carries a log-scaled inset of itself."
+#| fig-width: 10
+#| fig-height: 8
+
+# REPAIR: the script calls omTrans(results, sample = "par_startRatio").
+# omTrans() has no `sample` argument (formals: data, signal, target, col,
+# sdfac, seed), so the call aborts. The plain call is used, matching the
+# run-time snapshot stored beside these results; `col` then defaults to the
+# first par_ column, which is par_startRatio for this batch.
+df0 <- omTrans(results_complex)
+df0 <- rpcr_sim_contract(df0)
+
+# The noise columns are recomputed here exactly as in the source script. This
+# duplicates what omTrans() already did with the same seed, sdfac and
+# background values, and is kept so that the transplanted body is unchanged.
+set.seed(2025)
+sdfac = 200
+df0$FluoARn <- df0$FluoA  + rnorm(length(df0$FluoA), mean = 0, sd = para$bFluoA/sdfac)
+df0$FluoBRn <- df0$FluoB  + rnorm(length(df0$FluoB), mean = 0, sd = para$bFluoB/sdfac)
+df0$FluoARndelta <- df0$FluoARn - para$bFluoA
+df0$FluoBRndelta <- df0$FluoBRn - para$bFluoB
+
+df0$FluoAdelta <- df0$FluoA - para$bFluoA
+df0$FluoBdelta <- df0$FluoB - para$bFluoB
+wline <- 0.35
+
+tline <- "dotted"
+
+signals <- c("totalA","totalB","signalA.c","signalB.c","FluoA","FluoB","FluoAdelta","FluoBdelta","FluoARndelta","FluoBRndelta")
+
+inset <- c(0,15,0.3,0.95)
+plots <- lapply(signals,function(sig){
+  df <- df0
+  df[df[,sig]<1e-20,sig] <-  0
+
+  plot <- basic_plot +
+    geom_line(data = df,
+              aes(x = cycle,
+                  y = get(sig),
+                  col = par_startRatio,
+                  group = well),
+              linewidth = wline)  +
+    labs(x ="cycle", y = sig) + theme(axis.title.y = element_blank(),axis.title.x = element_blank()) + expand_limits(x=0,y=0)
+
+  plot <- plot +
+    annotation_custom(
+      ggplotGrob(plot + theme(axis.text.y = element_blank(),axis.text.x = element_blank()) + scale_y_continuous(trans = "log10")) ,
+      xmin = inset[1],
+      xmax = inset[2],
+      ymin = min(df[,sig]) + inset[3]*(max(df0[,sig])-min(df0[,sig])),
+      ymax = min(df[,sig]) + inset[4]*(max(df0[,sig])-min(df0[,sig]))
+    )
+
+})
+
+fig1a <- plots[seq(1,10,2)]
+
+fig1b <- plots[seq(2,10,2)]
+
+fig2 <- lapply(1:(length(signals)/2),function(i){
+  basic_plot +
+    geom_line(data = df0,
+              aes(x = get(signals[1+(i-1)*2]),
+                  y = get(signals[2+(i-1)*2]),
+                  col = par_startRatio,
+                  group = well),
+              linewidth = 0.35,
+              linetype=1) + theme(axis.title.y = element_blank(),axis.title.x = element_blank()) + expand_limits(x=0,y=0)
+})
+
+fig3 <- lapply(1:(length(signals)/2),function(i){
+  basic_plot +
+    geom_line(data=data.frame(cycle=rep(1:47,11),ratio=rep(unique(df0$par_startRatio),47)),aes(x=cycle,y=ratio,group=ratio),col="grey",linetype=1,linewidth=0.2)  +
+    geom_point(data=data.frame(cycle=c(rep(47,11),rep(47,11)),ratio=rep(unique(df0$par_startRatio),2)),aes(x=cycle,y=ratio,group=ratio,col=ratio),shape=15,size=0.5)  +
+    geom_line(data=data.frame(cycle=c(rep(45,11),rep(47,11)),
+                              ratio=c(df0[df0$cycle==45,signals[1+(i-1)*2]]/(df0[df0$cycle==45,signals[1+(i-1)*2]]+df0[df0$cycle==45,signals[2+(i-1)*2]]),unique(df0$par_startRatio)),startRatio=rep(unique(df0$par_startRatio),2)
+                              ),aes(x=cycle,y=ratio,group=startRatio,col=startRatio),linetype="11",linewidth=0.1)  +
+    geom_line(data = df0,
+              aes(x = cycle,
+                  y = get(signals[1+(i-1)*2])/(get(signals[1+(i-1)*2])+get(signals[2+(i-1)*2])),
+                  col = par_startRatio,
+                  group = well),
+              linewidth = 0.35,
+              linetype=1) + theme(axis.title.y = element_blank(),axis.title.x = element_blank()) +
+              ylim(-0.1,1.1)
+})
+
+figure_panelE <- ggarrange(plotlist = c(fig1a,fig1b,fig2,fig3),
+                    ncol = 5,
+                    nrow=4,
+                    common.legend = TRUE,
+                    legend="none",
+                    align = "hv",
+                    font.label=list(color="black",size=10))
+
+figure_panelE
+```
+
+Two lines of the source block are not carried over. `rpcr_plotPanel(df0, alpha = "par_hetero_k1", wline = 0.35)` assigned a value to `plots` that the `lapply()` over `signals` immediately overwrote, and `Sim_complex` holds a single `hetero_k1` value so the alpha mapping had nothing to vary over; the call had no effect on the figure. The intermediate `figure1a`/`figure1b`/ `figure2`/`figure3` row-wise `ggarrange()` objects were likewise superseded by the single 5 × 4 arrangement built from `c(fig1a, fig1b, fig2, fig3)`, which is the object the source script saved.
+
+The comment lines inside `fig2` that would have added the input-proportion reference marks were left commented out in the source and are dropped here; the equivalent marks *are* active in `fig3` and are retained there.
+
+------------------------------------------------------------------------
+
+# Save figure
+
+```{r}
+#| label: save-figures
+
+# Panels A-C (idealised scenario), as arranged by the source script.
+psave("ratioPCR_figure_S5A-C",
+      figure,
+      dpi = 300,
+      width = 18,
+      height = 4,
+      device = "pdf")
+
+# Panel E, the 5 x 4 bias-cascade grid.
+psave("ratioPCR_figure_S5E",
+      figure_panelE,
+      dpi = 300,
+      width = 15,
+      height = 12,
+      units = "cm",
+      device = "pdf")
+
+# The single-row strip of all ten amplification-curve panels, also written by
+# the source script under the scenario name.
+figure_strip <- ggarrange(plotlist = plots,
+                    ncol = 7,
+                    nrow=1,
+                    common.legend = TRUE,
+                    legend="none",
+                    font.label=list(color="black",size=10))
+
+# REPAIR: ggarrange() paginates when ncol * nrow is smaller than the number of
+# plots, so a 7 x 1 layout over ten panels returns a two-element *list* of
+# arrangements. The source script passed that list straight to psave(), which
+# ggsave() cannot write. Each page is written separately instead; the panels
+# themselves are unchanged.
+if (inherits(figure_strip, "list") && !inherits(figure_strip, "ggplot")) {
+  invisible(lapply(seq_along(figure_strip), function(i)
+    psave(paste0("Figure_Sim_complex_strip_p", i),
+          figure_strip[[i]], path = cpath,
+          dpi = 300, width = 18, height = 2.6, units = "cm", device = "pdf")))
+} else {
+  psave("Figure_Sim_complex", figure_strip, path = cpath,
+        dpi = 300, width = 18, height = 2.6, units = "cm", device = "pdf")
+}
+```
+
+------------------------------------------------------------------------

@@ -1,0 +1,454 @@
+---
+title: "ratioPCR Figure 1 — ratioPCR co-amplifies isoform-specific templates and reveals systematic signal distortion in multi-template PCR"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+> Figure 1: ratioPCR co-amplifies isoform-specific templates and reveals systematic signal distortion in multi-template PCR
+
+> Amplification produced the expected isoform-specific banding patterns confirmed by gel electrophoresis across all three assays (Figure 1D; full uncropped images including the DNA size ladder are shown in Supplementary Figure S4). Real-time fluorescence signals were recorded as normalised (Rn) and baseline-subtracted (ΔRn) values and visualised using amplification curves (Figure 1E), slope plots (Figure 1F), and proportion plots (Figure 1G).
+>
+> Increasing inclusion template abundance resulted in progressively higher inclusion probe signal and correspondingly reduced exclusion probe signal (Figure 1E). However, slope plots revealed markedly nonlinear relationships between the two probe signals across the full ratio range, indicating systematic distortion arising from differences in amplification efficiency and probe hydrolysis dynamics (Figure 1F). Proportion plots showed that the apparent inclusion proportion (ψₐ) drifted systematically over the course of amplification, with the magnitude and direction of drift depending on the input ratio, demonstrating ratio-dependent bias (Figure 1G). For NUMA1, cross-reactivity of the exclusion probe was directly visible as non-zero exclusion probe signal in samples containing only the inclusion template (arrow; Figures 1E and 1F), consistent with the thermodynamic and experimental probe specificity data in Supplementary Figure S3. In addition, one replicate exhibited an erroneous ψₐ estimate caused by incorrect automatic background subtraction by the instrument software (asterisk; Figure 1G).
+
+Panel inventory for this document:
+
+| Panel | Content |
+|---------------------|---------------------------|
+| A–C | Assay principle and reference-sample design |
+| D | Cropped agarose gels of the RT-PCR reference series |
+| E | Rn amplification curves across 0–100 % inclusion |
+| F | Slope plots, inclusion vs exclusion probe signal |
+| G | Proportion plots, apparent-proportion drift over cycles |
+
+# Setup
+
+The reference series is the calibration plate `20191120AS calibration.xlsx`: eleven defined inclusion proportions (0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1) in triplicate for each of the three assays KIF13A, NUMA1 and SYNE1, co-amplified with shared primers and isoform-specific hydrolysis probes. `rpcr_calibDetect()` assigns the theoretical proportion ψ to each well from the sample annotation; negative controls are removed because they carry no proportion.
+
+```{r}
+#| label: setup
+#| echo: true
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+
+library(grid)
+
+simple_theme <- ratioPCR:::simple_theme
+
+# Render-time recompute switch. A plain R variable, not Quarto's reserved
+# `params`: a separate script defines its own global `params` list, and
+# Quarto locks the binding of that name.
+recalculate <- as.logical(Sys.getenv("RPCR_RECALCULATE", "TRUE"))
+
+calibrationFile <- file.path(pp, "documents", "extdata", "20191120AS calibration.xlsx")
+
+# importing data
+import <- rpcr_wrap(rpcr_readTF(calibrationFile))
+import <- import[!import$sample == "neg. ctrl", ]
+import <- rpcr_calibDetect(import, qual = "")
+
+import$sample <- as.numeric(gsub("[^0-9.]", "", as.character(import$sample)))
+```
+
+## Panel D inputs — the gel scans
+
+Inputs for panel D are the three Bio-Rad `.scn` scanner files of the 45 min runs. The `.scn` container is a MIME envelope whose `ImageData` part holds the raw frame as uncompressed 16-bit little-endian, row-major pixels; frame size, data ceiling, exposure and the stored Image Lab display transform sit in XML parts elsewhere in the file. The reader below extracts both and was validated once against Fiji/Bio-Formats exports of the same three files, which gave bit-identical pixel matrices.
+
+The chunk is shared verbatim with `ratioPCR_Figure_S4.qmd` apart from `lane_cols`, the lane-key palette used only for this panel, so both documents work from the same pixels under the same linear display transform and, because the ladder fit can widen the crop (below), from the same crop window. Panel D differs from S4 only in cropping — the strip is the `auto_crop()` window, which excludes the ladder lane — and in carrying the lane key and the ladder marker annotations.
+
+```{r}
+#| label: setup-gels
+#| echo: true
+
+files     <- c(KIF13A = "20191121AS calibration Kif13a 45min.scn",
+               NUMA1  = "20191121AS calibration Numa1 45min.scn",
+               SYNE1  = "20191121AS calibration Syne1 45min.scn")
+files <- setNames(
+  file.path(pp, "documents", "extdata", "images", files),
+  names(files)
+)
+
+lin_white <- c(4095, 4095, 2118)   ## CHECK ## must match panel D
+lin_gamma <- c(1,    1,    1)      ## CHECK ## 1 = strictly linear
+
+lanes     <- c("0","5","15","25","35","50","65","75","85","95","100")
+lane_cols <- c("#EA533E","#EB6345","#F08252","#F2A060","#F6B968","#FCE177",
+               "#CBCD7F","#A8C183","#80B585","#4EA887","#1FA68B")   ## CHECK ##
+n_slots   <- length(lanes) + 1L    # + NTC, which carries no signal
+
+# Which ladder bands to annotate, per assay. Only the sizes are given here: the
+# heights are measured in the ladder lane by ladder_fit() below, never typed in.
+marker_bp <- list(KIF13A = 200, NUMA1 = 200, SYNE1 = c(200, 100))
+MPAD      <- 10L   # px of clear gel kept above the topmost annotated band
+
+# ------------------------------------------------------------------ read .scn
+
+xml_val <- function(b, tag, attr) {
+  p <- grepRaw(charToRaw(tag), b, fixed = TRUE)[1]
+  s <- b[p:min(length(b), p + 400)]
+  t <- rawToChar(s[s != as.raw(0)]); Encoding(t) <- "UTF-8"
+  regmatches(t, regexec(paste0(attr, '="([^"]*)"'), t))[[1]][2]
+}
+
+read_scn <- function(path) {
+  b <- readBin(path, "raw", n = file.info(path)$size)
+  w <- as.integer(xml_val(b, "<size_pix", "width"))
+  h <- as.integer(xml_val(b, "<size_pix", "height"))
+  p <- grepRaw(charToRaw("Content-Description: ImageData"), b, fixed = TRUE)[1]
+  o <- grepRaw(charToRaw("\r\n\r\n"), b, offset = p, fixed = TRUE)[1] + 4L
+  v <- matrix(readBin(b[o:(o + 2 * w * h - 1)], "integer", n = w * h,
+                      size = 2L, signed = FALSE, endian = "little"),
+              nrow = h, ncol = w, byrow = TRUE)
+  list(v = v,
+       ceiling = as.numeric(xml_val(b, "<scanner",       "data_ceiling")),
+       gamma   = as.numeric(xml_val(b, "<transform",     "gamma")),
+       frac    = as.numeric(xml_val(b, "<transform",     "high_frac")),
+       expo    = as.numeric(xml_val(b, "<exposure_time", "value")))
+}
+
+# ------------------------------------------------------------------ auto crop
+# Rows: vertical extent of signal spanning many lanes (a ladder lane is only a
+# few columns wide and drops out at the profile cut). Columns: measured inside
+# that row band, then extended right by one lane pitch per signal-free lane.
+
+auto_crop <- function(v) {
+  bg <- median(v); m <- v > bg + 8 * median(abs(v - bg)) * 1.4826
+  # stats::filter, not dplyr::filter: Figure_settings.R attaches tidyverse,
+  # which masks the moving-average filter this line needs.
+  sm <- function(x) { z <- as.numeric(stats::filter(x, rep(1/9, 9))); z[is.na(z)] <- 0; z }
+  rp <- sm(rowSums(m)); r <- range(which(rp > .3 * max(rp)))
+  cp <- sm(colSums(m[r[1]:r[2], ])); k <- cp > .3 * max(cp); cc <- range(which(k))
+  nd <- sum(k[-1] & !k[-length(k)]) + k[1]
+  if (nd != n_slots - 1L) warning(sprintf("%d lane clusters, expected %d", nd, n_slots - 1L))
+  c(r[1] - 12, r[2] + 12, cc[1] - 14,
+    round(cc[2] + (cc[2] - cc[1]) / (nd - 1) * (n_slots - nd)) + 14)
+}
+
+# ----------------------------------------------------------------- ladder lane
+# The ladder is the leftmost loaded lane and the auto crop starts one lane pitch
+# to its right, so the ladder occupies the columns left of cr[3]. Marker heights
+# are measured there rather than read off by eye.
+#
+# lad_peaks() takes band rows as local maxima of the lane's row profile after a
+# running-median baseline is removed, picked strongest-first with a minimum
+# separation so one band cannot be counted twice.
+#
+# ladder_fit() assigns sizes from the two unambiguous features of a SolisBiodyne
+# 100 bp Ready-to-Load ladder (product sheet: documents/extdata/images/
+# 8603_100bp_DNA_Ladder.png): the lowest band is 100 bp, and the brightest band
+# of the 100-1000 bp cluster is the bolded 500 bp reference band, which carries
+# 104 ng against 31-42 ng in its neighbours. Those two anchors fix
+# row = a + b*log10(bp); that the 200, 300 and 400 bp bands then land within
+# LAD_TOL px of that prediction is the check that the assignment is right, and
+# a and b are refitted by least squares over every matched band. Fewer than four
+# matched bands is an error rather than a silently shifted annotation.
+
+LAD_TOL <- 6      # px; band spacing at 300-400 bp is ~40 px, so this is unambiguous
+
+lad_peaks <- function(prof, sep = 8L, min_prom = .12) {
+  s <- as.numeric(stats::filter(prof, rep(1/5, 5)))
+  s[is.na(s)] <- min(prof, na.rm = TRUE)
+  z <- s - stats::runmed(s, 61L)
+  cand <- which(z > min_prom * max(z)); out <- integer(0)
+  while (length(cand)) {
+    i <- cand[which.max(z[cand])]
+    out <- c(out, i); cand <- cand[abs(cand - i) > sep]
+  }
+  list(row = sort(out), h = z[sort(out)])
+}
+
+ladder_fit <- function(v, cr, half = 6L) {
+  cp <- colMeans(v[, 1:(cr[3] - 1L), drop = FALSE])
+  z  <- as.numeric(stats::filter(cp, rep(1/5, 5))); z[is.na(z)] <- 0
+  lc <- which.max(z)
+  cols <- max(1L, lc - half):min(ncol(v), lc + half)
+  pk <- lad_peaks(rowMeans(v[, cols, drop = FALSE]))
+  r100 <- max(pk$row)                 # lowest band    = smallest fragment
+  r500 <- pk$row[which.max(pk$h)]     # brightest band = 500 bp reference band
+  b0 <- (r500 - r100) / (log10(500) - log10(100)); a0 <- r100 - b0 * log10(100)
+  rows <- numeric(0); used <- numeric(0)
+  for (s in c(100, 200, 300, 400, 500)) {
+    d <- abs(pk$row - (a0 + b0 * log10(s)))
+    if (min(d) <= LAD_TOL) { rows <- c(rows, pk$row[which.min(d)]); used <- c(used, s) }
+  }
+  if (length(used) < 4L)
+    stop(sprintf("ladder lane: only %d of 5 bands (100-500 bp) matched the two-anchor fit",
+                 length(used)))
+  f <- stats::lm(rows ~ log10(used))
+  list(cols = range(cols), a = unname(coef(f)[1]), b = unname(coef(f)[2]),
+       bands = setNames(rows, used), resid = max(abs(residuals(f))))
+}
+
+# ------------------------------------------------------------------- load all
+
+gel <- lapply(seq_along(files), function(i) {
+  s <- read_scn(files[i]); cr <- auto_crop(s$v)
+  # Ladder-derived marker rows, and the crop extension they force. The auto crop
+  # brackets the sample bands with 12 px of headroom, so an annotated band that
+  # runs above the largest amplicon falls outside it: SYNE1, whose products are
+  # 149 and 80 bp, has its 200 bp band ~20 px above the bracket. The top of the
+  # crop is therefore lowered to clear the topmost marker by MPAD px. A marker
+  # that would fall below the crop is dropped with a warning rather than drawn
+  # at the wrong height.
+  lad <- ladder_fit(s$v, cr)
+  mr  <- setNames(lad$a + lad$b * log10(marker_bp[[i]]),
+                  paste(marker_bp[[i]], "bp"))
+  if (min(mr) - MPAD < cr[1]) cr[1] <- max(1L, floor(min(mr) - MPAD))
+  keep <- mr >= cr[1] & mr <= cr[2]
+  if (any(!keep))
+    warning(sprintf("%s: %s below the crop window, not annotated", names(files)[i],
+                    paste(names(mr)[!keep], collapse = ", ")))
+  list(crop = cr, expo = s$expo, white = round(s$frac * s$ceiling), gamma = s$gamma,
+       ceiling = s$ceiling,
+       dim  = dim(s$v), max = max(s$v),
+       ladder = lad, marker_rows = mr[keep],
+       markers = (mr[keep] - cr[1]) / (cr[2] - cr[1]),
+       lin  = pmin(s$v / lin_white[i], 1)^lin_gamma[i],
+       enh  = 1 - pmin(s$v / (s$frac * s$ceiling), 1)^s$gamma,
+       strip = pmin(s$v[cr[1]:cr[2], cr[3]:cr[4]] / lin_white[i], 1)^lin_gamma[i])
+})
+names(gel) <- names(files)
+
+# place a viewport by inches from the top-left of the page
+at <- function(x, y, w, h, PH)
+  viewport(x = unit(x, "in"), y = unit(PH - y, "in"),
+           width = unit(w, "in"), height = unit(h, "in"), just = c("left", "top"))
+```
+
+# Panels A–C — assay principle and reference-sample design
+
+Panel A shows the rPCR principle: a single common primer pair amplifies both the inclusion and the exclusion isoform of one alternatively spliced target, and two spectrally distinct hydrolysis probes — one placed inside the alternative exon, one spanning the exon–exon junction created by exon skipping — report the two amplicons in the same reaction. Panel B shows the two fluorescence readouts recorded per cycle and the definition of the apparent inclusion proportion ψₐ = F_incl / (F_incl + F_excl) (Eq. 1). Panel C shows the reference-sample design: long synthetic oligonucleotides representing the two isoforms, mixed at defined molar ratios spanning 0 % to 100 % inclusion, which provide the ground-truth ψ used for every calibration in this study.
+
+These three panels are drawn schematics. **They are not generated from code in this repository** and no plot is produced for them here. \# Panel D — cropped gels of the reference series
+
+Panel D shows cropped agarose-gel strips of the RT-PCR products of the reference series for the three assays, without the size ladder; the full uncropped gels including the 100 bp ladder are Supplementary Figure S4.
+
+The code below reads the scanner images in `documents/extdata/images/*45min.scn` and writes `documents/figures/ratioPCR_figure_1D.pdf` through `cairo_pdf()`. The `ratioPCR_figure_S4.pdf` panel is reproduced in `ratioPCR_Figure_S4.qmd`; the two documents share the setup chunk above verbatim so that the two panels cannot drift apart.
+
+The panel is qualitative. It establishes that a single common primer pair per assay co-amplifies both isoform templates from the synthetic reference series, that the two products are the expected sizes, and that the upper:lower intensity ratio moves monotonically across the eleven reference proportions — the observation that the real-time measurements in panels E–G then quantify, and whose systematic distortion the calibration model corrects. The panel is *not* used to estimate the apparent proportion ψₐ; densitometry of these gels is subject to the heteroduplex bias demonstrated in Supplementary Figure S2, which is one of the reasons a fluorescence readout is used instead.
+
+The three strips are drawn stacked at a common width, each at its own pixel aspect ratio, above a colour key that labels the eleven reference proportions and the no-template control. The lane colours are the reference-series palette used throughout the figure, so a lane in the gel can be matched to the corresponding amplification trace in panels E–G by colour alone. The display transform is strictly linear (black point 0, white point `lin_white`, γ = 1, not inverted); the un-transformed 12-bit data are what any quantification would use, and the full frames together with the enhanced rendering are shown in Supplementary Figure S4.
+
+Marker heights are detected, not typed. `marker_bp` names which ladder bands to annotate — 200 bp for all three assays, plus 100 bp for SYNE1, whose exclusion amplicon runs at \~80 bp — and `ladder_fit()` in the setup chunk measures where those bands ran in the ladder lane of the same frame, converting each to a fraction of strip height through the crop window. The previous hand-read fractions (`.28`, `.30`, `.19`, `.72`, flagged `## CHECK ##`) put two of the four ticks on the wrong height: the KIF13A 200 bp tick sat 16 px above the 200 bp band, in empty gel above the 212 bp inclusion product, and the SYNE1 200 bp tick sat on the 149 bp inclusion band, 34 px below the 200 bp band. SYNE1 also needs the crop extension described in the setup chunk, because with 149 and 80 bp products its 200 bp band runs above the band bracket `auto_crop()` returns; its strip is therefore 148 px tall rather than 126, and shows \~20 px of clear gel above the inclusion band. The amplicon sizes quoted in the legend are not annotated onto the strips. The ladder geometry behind the ticks is tabulated below the panel.
+
+```{r}
+#| label: panel-D-layout
+
+GW <- 5.6; LAB <- .8; MRK <- .7; PAD <- .1; HDR <- .5; GAP <- .06
+sh <- sapply(gel, function(g) nrow(g$strip) / ncol(g$strip) * GW)
+PW <- LAB + GW + MRK + 2 * PAD
+PH <- 2 * PAD + HDR + sum(sh) + (length(gel) - 1) * GAP
+
+draw_panelD <- function() {
+  grid.newpage()
+
+  grid.text("percentage of inclusion isoform [%]",
+            x = unit(PAD + LAB + GW / 2, "in"), y = unit(PH - PAD - .09, "in"),
+            gp = gpar(fontsize = 9))
+  pushViewport(at(PAD + LAB, PAD + .22, GW, .26, PH))
+  for (k in seq_along(lanes)) {
+    grid.rect(x = unit((k - .5) / n_slots, "npc"), width = unit(.94 / n_slots, "npc"),
+              gp = gpar(fill = lane_cols[k], col = NA))
+    grid.text(lanes[k], x = unit((k - .5) / n_slots, "npc"), gp = gpar(fontsize = 7.5))
+  }
+  grid.text("NTC", x = unit((n_slots - .5) / n_slots, "npc"), gp = gpar(fontsize = 7.5))
+  popViewport()
+
+  y <- PAD + HDR
+  for (i in seq_along(gel)) {
+    grid.text(names(gel)[i], x = unit(PAD + LAB - .06, "in"),
+              y = unit(PH - y - sh[i] / 2, "in"), just = "right", gp = gpar(fontsize = 9))
+    pushViewport(at(PAD + LAB, y, GW, sh[i], PH))
+    grid.raster(gel[[i]]$strip, interpolate = FALSE,
+                width = unit(1, "npc"), height = unit(1, "npc"))
+    popViewport()
+    mk <- gel[[i]]$markers          # detected in the ladder lane, see setup chunk
+    for (k in seq_along(mk)) {
+      ym <- PH - y - mk[k] * sh[i]
+      grid.lines(x = unit(PAD + LAB + GW + c(.02, .10), "in"), y = unit(ym, "in"),
+                 gp = gpar(lwd = .7))
+      grid.text(names(mk)[k], x = unit(PAD + LAB + GW + .13, "in"),
+                y = unit(ym, "in"), just = "left", gp = gpar(fontsize = 7))
+    }
+    y <- y + sh[i] + GAP
+  }
+}
+```
+
+```{r panel-D-draw, fig.width = PW, fig.height = PH}
+draw_panelD()
+```
+
+The crop window and acquisition parameters behind these strips are tabulated so that the panel can be checked against Supplementary Figure S4, where the same window is outlined in red on the full frame.
+
+```{r}
+#| label: panel-D-crop-window
+
+knitr::kable(
+  data.frame(
+    assay          = names(gel),
+    `frame (px)`   = sapply(gel, function(g) paste(g$dim[2], "\u00d7", g$dim[1])),
+    `crop rows`    = sapply(gel, function(g) paste(g$crop[1], g$crop[2], sep = "-")),
+    `crop cols`    = sapply(gel, function(g) paste(g$crop[3], g$crop[4], sep = "-")),
+    `strip (px)`   = sapply(gel, function(g) paste(ncol(g$strip), "\u00d7", nrow(g$strip))),
+    `exposure (s)` = sprintf("%.2f", sapply(gel, `[[`, "expo")),
+    `linear white` = lin_white,
+    `max value`    = sapply(gel, `[[`, "max"),
+    `ceiling`      = sapply(gel, `[[`, "ceiling"),
+    check.names    = FALSE, row.names = NULL
+  ),
+  caption = "Crop window and acquisition parameters for the three panel D strips. The crop excludes the ladder lane; the same window is outlined on the full frames in Supplementary Figure S4."
+)
+```
+
+The ladder fit behind the marker heights is tabulated as well, so the annotation can be checked without re-running the detection: the band rows it matched, the worst residual of the `row = a + b*log10(bp)` fit, its slope, and the resulting tick heights. A residual of a few pixels is the width of a band edge.
+
+```{r}
+#| label: panel-D-ladder-fit
+
+knitr::kable(
+  data.frame(
+    assay            = names(gel),
+    `ladder cols`    = sapply(gel, function(g) paste(g$ladder$cols, collapse = "-")),
+    `bands (bp)`     = sapply(gel, function(g) paste(names(g$ladder$bands), collapse = " ")),
+    `band rows`      = sapply(gel, function(g) paste(g$ladder$bands, collapse = " ")),
+    `fit resid (px)` = sprintf("%.2f", sapply(gel, function(g) g$ladder$resid)),
+    `px per decade`  = sprintf("%.1f", sapply(gel, function(g) -g$ladder$b)),
+    `markers`        = sapply(gel, function(g)
+                         paste(sprintf("%s at %.3f (row %.1f)", names(g$markers),
+                                       g$markers, g$marker_rows), collapse = "; ")),
+    check.names      = FALSE, row.names = NULL
+  ),
+  caption = "Ladder-lane fit used to place the marker ticks. Band rows are detected in the ladder lane of the same frame; marker heights are fractions of strip height, measured from the top of the crop window."
+)
+```
+
+# Panel E — Rn amplification curves across the reference series
+
+Panel E shows the raw normalised fluorescence (Rn) of the inclusion and the exclusion probe over all 45 cycles for every reference sample, faceted by assay and coloured by probe. Increasing the inclusion template fraction raises the inclusion probe signal and lowers the exclusion probe signal; the panel is the qualitative check that both templates are in fact co-amplified in one reaction before any ratio is computed from the two channels.
+
+`rpcr_plotCalibSummary()` returns a nested list of summary plots: the first level selects the signal representation (`[[1]]` = ΔRn, `[[2]]` = Rn) and the second the plot type (`[[3]]` = amplification curves, `[[4]]` = slope plot, `[[5]]` = proportion plot). Figure 1 uses the Rn branch, `plots[[2]]`.
+
+```{r}
+#| label: panel-E
+#| echo: true
+#| fig-width: 8
+#| fig-height: 4
+
+colplot <- TRUE
+target_color <- rpcr_col_target[1:3]
+iso_color <- if (colplot) rpcr_col_probe[c(1, 3)] else rev(rpcr_col_sample(2))
+
+plots <- rpcr_plotCalibSummary(import, colplot = colplot, color_probe = rpcr_col_probe)
+
+FigF <- plots[[2]][[3]] + simple_theme
+
+FigF
+```
+
+The exclusion-probe cross-reactivity of the NUMA1 assay is visible here as a rising exclusion-probe trace in the 100 % inclusion samples. The arrow that marks it in the published panel is an annotation added when the figure was assembled for submission; it is not drawn by this code. \# Panel F — slope plots of inclusion against exclusion probe signal
+
+Panel F plots the two probe signals against each other, one point per cycle and well. A ratio that were proportional to template abundance would give a straight line per reference sample, with the slope encoding the ratio. The observed trajectories are markedly nonlinear across the ratio range, which is the direct evidence of amplification-efficiency and probe-hydrolysis differences between the two co-amplified templates.
+
+```{r}
+#| label: panel-F
+#| echo: true
+#| fig-width: 4
+#| fig-height: 4
+
+FigG <- plots[[2]][[4]] + simple_theme +
+  theme(strip.background.y = element_blank(), strip.text.y = element_blank()) +
+  labs(title = " ",
+       x = "Fluorescence signal [deltaRn]\n(inclusion probe)",
+       y = "Fluorescence signal [deltaRn]\n(exclusion probe)")
+
+FigG
+```
+
+# Panel G — proportion plots and apparent-proportion drift
+
+Panel G plots the apparent proportion ψₐ computed cycle by cycle from the two probe signals. If the fluorescence ratio tracked the template ratio, each reference sample would sit on a horizontal line at its theoretical ψ. Instead ψₐ drifts over the course of amplification, and both the magnitude and the direction of the drift depend on the input ratio — the ratio-dependent bias that the four-parameter calibration model of Figure 3 is built to correct. The y-axis is clipped to the proportion range with `coord_cartesian()` so that the early-cycle values, which are dominated by baseline noise, do not compress the informative part of the panel.
+
+```{r}
+#| label: panel-G
+#| echo: true
+#| fig-width: 4
+#| fig-height: 4
+
+FigH <- plots[[2]][[5]] + simple_theme +
+  theme(strip.background.y = element_blank(), strip.text.y = element_blank()) +
+  coord_cartesian(ylim = c(-0.1, 1.1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2)) +
+  labs(title = " ",
+       x = "Fluorescence signal [deltaRn]\n(inclusion probe)",
+       y = "Fluorescence signal [deltaRn]\n(exclusion probe)")
+
+FigH
+```
+
+One replicate carries an erroneous ψₐ caused by incorrect automatic background subtraction by the instrument software. It is retained in the panel — removing it would misrepresent the raw data — and is marked with an asterisk in the published figure. That asterisk, like the arrow in panels E and F, is a layout annotation and is not produced by this code. \# Save figure
+
+Panel D is an imperative `grid` drawing rather than a `ggplot` object, so `psave()` — which wraps `ggsave()` — cannot be used for it. It is written with `cairo_pdf()` at the page size computed in the layout chunk, as in the source script. The write is routed through `fpath` (`documents/figures`, defined by `Figure_settings.R`) so that nothing lands in the render directory.
+
+```{r}
+#| label: save-panel-D
+#| echo: true
+
+dir.create(fpath, showWarnings = FALSE, recursive = TRUE)
+
+cairo_pdf(file.path(fpath, "ratioPCR_figure_1D.pdf"), width = PW, height = PH)
+draw_panelD()
+invisible(dev.off())
+
+file.path(fpath, "ratioPCR_figure_1D.pdf")
+```
+
+Panels E, F and G are assembled left to right with `ggpubr::ggarrange()` and relative widths 4 : 2 : 2, and labelled E, F, G to match their position in the final figure. `psave()` writes into `documents/figures` under the `ratioPCR_figure_<figure><panel>` convention.
+
+```{r}
+#| label: save-figure
+#| echo: true
+
+figure_1_E_G <- ggpubr::ggarrange(plotlist = list(FigF, FigG, FigH),
+                                  ncol = 3,
+                                  nrow = 1,
+                                  labels = c("E", "F", "G"),
+                                  common.legend = TRUE,
+                                  legend = "bottom",
+                                  align = "hv",
+                                  widths = c(4, 2, 2),
+                                  font.label = list(size = 9, face = "bold", color = "black"))
+
+psave(filename = "ratioPCR_figure_1E-G",
+      plot = figure_1_E_G,
+      path = fpath,
+      dpi = 300,
+      width = 16,
+      height = 8,
+      device = "pdf")
+
+psave(filename = "ratioPCR_figure_1E",
+      plot = FigF, path = fpath, dpi = 300, width = 8, height = 8, device = "pdf")
+psave(filename = "ratioPCR_figure_1F",
+      plot = FigG, path = fpath, dpi = 300, width = 4, height = 8, device = "pdf")
+psave(filename = "ratioPCR_figure_1G",
+      plot = FigH, path = fpath, dpi = 300, width = 4, height = 8, device = "pdf")
+
+list.files(fpath, pattern = "^ratioPCR_figure_1", full.names = FALSE)
+```

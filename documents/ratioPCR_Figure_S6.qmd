@@ -1,0 +1,604 @@
+---
+title: "ratioPCR Figure S6 — Mechanistic basis of equimolar drift: heteroduplex association kinetics determine proportion-dependent amplification efficiency differences"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+> **Supplementary Figure S6: Mechanistic basis of equimolar drift: heteroduplex association kinetics determine proportion-dependent amplification efficiency differences**
+>
+> (a) Simulation design. Single-cycle simulations were performed across a range of total template amounts (colour: dark blue = 1×10⁻⁷ M to yellow = 4×10⁻⁷ M) and starting template proportions (colour: dark blue = 0 to yellow = 1.0), using a fixed homoduplex association rate of k₁_homo = 1×10⁶ M⁻¹s⁻¹ and three different heteroduplex association rates: k₁_hetero = 1×10⁶, 6×10⁵, and 3×10⁵ M⁻¹s⁻¹. For each condition, homoduplex formation fraction, heteroduplex formation fraction, total re-annealing fraction, amplification efficiency, and new amplicon yield were calculated as a function of starting template proportion.
+>
+> (b) Equal association rates (k₁_hetero = 1×10⁶ M⁻¹s⁻¹). When homo- and heteroduplex formation proceed at equal rates, the fraction of molecules forming homoduplexes is minimal and heteroduplex formation is maximal at equimolar template ratios. Total re-annealing and amplification efficiency are independent of template proportion under these conditions, meaning no proportion-dependent efficiency difference arises. Amplification efficiency decreases with increasing total template concentration due to greater overall re-annealing competition.
+>
+> (c) Reduced heteroduplex association rate (k₁_hetero = 3×10⁵ M⁻¹s⁻¹). When heteroduplexes form less readily than homoduplexes, the total re-annealing fraction and amplification efficiency become proportion-dependent. Efficiency is highest at equimolar ratios (where heteroduplex formation is most suppressed relative to homoduplex formation) and decreases as the proportion of either template increases. This creates a template-specific efficiency difference that depends on the starting proportion. Results are shown for total templates (top two rows) and separately for template A and template B (bottom two rows), illustrating that the efficiency asymmetry affects each template differently depending on its relative abundance.
+>
+> (d) Proportion-dependent efficiency differences drive equimolar drift. At equal re-annealing rates, the per-template amplification efficiencies of targets A and B are identical across all proportions (left column, flat relationship). As the heteroduplex association rate is decreased to 6×10⁵ (middle) and 3×10⁵ M⁻¹s⁻¹ (right), proportion-dependent efficiency differences emerge (top row), with the efficiency ratio deviating from 1 in a proportion-dependent manner (middle row). This leads to a systematic, proportion-dependent deviation of the measured proportion from the input proportion (bottom row), producing the characteristic S-shaped bias profile seen in Figure 2G. The sole exception is the equimolar 1:1 ratio, at which both templates experience identical rehybridisation competition and no efficiency difference arises.
+>
+> (e) Schematic summary of the amplification inhibition mechanism. In multi-template PCR, amplification efficiency is enhanced by heteroduplex formation relative to homoduplex formation, because heteroduplexes are not substrates for extension. The less abundant template has a proportionally higher fraction of its strands in heteroduplexes, giving it a relatively higher effective efficiency compared with the more abundant template. This creates a systematic pull toward equimolar proportions that increases in magnitude as the heteroduplex association rate decreases relative to the homoduplex rate.
+
+## Source script and scenario directory
+
+Unlike the full-PCR simulations of Figure 2 and Supplementary Figure S5, this figure was produced from a Quarto notebook that was later purled into `.R` files and archived inside the simulation directories. Several near-identical timestamped copies exist:
+
+| Directory | Copies | Content |
+|----------------------------|---------------------|-----------------------|
+| `Sim_hetero_singlecycle` | `rP_Heteroduplex.qmd_2025-09-26_2300` … `_2025-09-27_0029` (nine copies, \~3 kB) | setup and the single-cycle batch definition only |
+| `Sim_Hetero_sCycle` | `…_2025-09-27_1123`, `_1124`, `_2025-09-29_1237`, `_1238` (\~9 kB) | adds the derived efficiency quantities and exploratory fits |
+| `Sim_Hetero_asymetric_sCycle` | `…_2025-09-28_2015`, `_2036` (\~7 kB) | adds the asymmetric-rehybridisation variant (`rehybB_k1 = 3×10⁶`) |
+
+
+The **data** all three panels read is `documents/rPCRsim/Sim_Hetero_sCycle/results/results.rds`: the notebook sets `title <- "Hetero_sCycle"` and reads `Sim_<title>/results/results.rds`, and its nested sweep already contains all three heteroduplex rates (`hetero_k1 = c(3e5, 6e5, 1e6)`). Panel b is the `hetero_k1 == 1e6` slice of that same object, not a separate simulation.
+
+Single-cycle rather than full-PCR simulations are used here for a substantive reason: PCR is iterative, so in a 45-cycle run the per-cycle efficiency difference compounds and cannot be read off the end point. Restricting the model to `cycle_max = 1` and sweeping the *starting* amount instead isolates the per-cycle effect at each point along the amplification curve.
+
+# Setup
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+source(file.path(pp, "documents", "scripts", "omPCR_functions.R"))
+
+library(ggplot2)
+library(ratioPCR)
+# scale_color_viridis() used by every panel below comes from viridis; the
+# source notebook relied on it being attached by the interactive session.
+library(viridis)
+
+# Paths. REPAIR: the notebook used a hard-coded /scicore/... prefix and wrote
+# figures with paste0(fpath, "name.pdf"), which depends on fpath carrying a
+# trailing slash. Both are replaced by here::here()-derived paths and psave().
+path_sim <- file.path(pp, "documents", "rPCRsim")
+fpath    <- file.path(pp, "documents", "figures")
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+sim_scycle <- "Sim_Hetero_sCycle"
+
+# Re-simulation switch, FALSE by default: OpenModelica and the rPCR_03 model
+# tree are not available at render time. No Quarto `params:` block is used.
+resimulate <- as.logical(Sys.getenv("RPCR_RESIMULATE", "FALSE"))
+simModel   <- "rPCR_03"
+simPath    <- file.path(Sys.getenv("HOME"), "openmodelica", simModel)
+
+# Panel theme. REPAIR (session leakage): inherited from the interactive
+# session in the source notebook.
+theme_figure <- theme(
+  axis.text.y = element_text(size = 5, face = "plain"),
+  axis.text.x = element_text(size = 5),
+  panel.grid.major = element_blank(),
+  axis.text = element_text(size = 5),
+  axis.title = element_text(face = "plain"),
+  axis.title.y = element_text(vjust = 0),
+  strip.placement = "outside",
+  strip.text.y = element_text(vjust = 0, size = 8),
+  plot.margin = margin(0, 0, 0, 0, "cm"))
+
+# Standard kinetic parameter set, verbatim from the source notebook. The
+# single-cycle design below is this set with cycle_max = 1 and a swept
+# starting template amount.
+stdPara <- data.frame(
+  tolerance = 1e-8,
+  cycle_max = 45,
+  cycle_time = 45,
+  startPrimer = 500 * 1e-9, # nM
+  startTemplate = copytoconc(1e6), # copies
+  startRatio = 0.5,
+  ProbeA = 0 * 1e-9, # nM
+  ProbeB = 0 * 1e-9, # nM
+  Signal_A = 0,
+  Signal_B = 0,
+  Primer_k1 = 2e5,
+  # literature: 5e5 /M s
+  Primer_k2 = 1e-3,
+  # literature: 1e-4 /s
+  ProbeA_k1 = 3e5,
+  ProbeA_k2 = 1e-3,
+  ProbeB_k1 = 3e5,
+  ProbeB_k2 = 1e-3,
+  hetero_k1 = 1e6,
+  hetero_k2 = 1e-4,
+  rehybA_k1 = 1e6,
+  rehybA_k2 = 1e-4,
+  rehybB_k1 = 1e6,
+  rehybB_k2 = 1e-4,
+  Polymerase = 2e-7,
+  RdsPoly_k1 = 1e6,
+  RdsPoly_k2 = 1e-3,
+  RiniPoly_k1 = 1e6,
+  RiniPoly_k2 = 1e-3,
+  RextPoly_k1 = 60,
+  sFluoA = 50e6,
+  sFluoB = 50e6,
+  bFluoA = 1,
+  bFluoB = 1,
+  lFluoA = 0,
+  lFluoB = 0,
+  Aa_PB_k1 = 1e-20,
+  Aa_PB_k2 = 1e20,
+  Ba_PA_k1 = 1e-20,
+  Ba_PA_k2 = 1e20
+)
+
+stdPara$stopTime <- stdPara$cycle_time * stdPara$cycle_max
+stdPara$stepSize <- stdPara$cycle_time
+
+results <- readRDS(file.path(path_sim, sim_scycle, "results", "results.rds"))
+```
+
+------------------------------------------------------------------------
+
+# Panel a — Simulation design
+
+Panel a states the design that panels b–d read out. A single PCR cycle is simulated over a two-dimensional grid: ten total template amounts spanning essentially zero to 95% of the primer concentration, and starting proportions from 0 to 1 in steps of 0.05. The primer concentration is reduced by the template amount at each grid point so that total nucleic acid, and hence the re-annealing competition, is held comparable across the sweep. The homoduplex rehybridisation rates of both templates are fixed at k₁_homo = 1×10⁶ M⁻¹s⁻¹ and the heteroduplex association rate is set to 1×10⁶, 6×10⁵ or 3×10⁵ M⁻¹s⁻¹ — equal to, moderately below, and well below the homoduplex rate.
+
+From each simulated cycle five quantities are derived as a function of the starting proportion: the fraction of strands re-annealed as homoduplex, the fraction re-annealed as heteroduplex, their sum (total re-annealing), amplification efficiency (new strands relative to input strands) and absolute new amplicon yield. Efficiencies are formed per template (`effA`, `effB`) as well as for the total (`effT`), because the whole argument of this figure turns on the *difference* between the two.
+
+```{r}
+#| label: figS6-panel-a
+
+title <- "Hetero_sCycle"
+expName <- paste0("Sim_",title)
+para <- stdPara
+para$stepSize <- para$cycle_time
+para$cycle_max<-1
+para$stopTime <-para$cycle_time * para$cycle_ma
+
+template <- seq(1e-18,para$startPrimer*0.95,length.out=10)
+primer <- para$startPrimer-template
+mpara <- cbind(para, rep(1,length(template)))
+mpara$startTemplate <- template
+mpara$startPrimer <- primer
+
+nlist <- list(hetero_k1 = c(3e5,6e5,1e6),
+              startRatio = seq(0.0,1,0.05))
+
+if (resimulate) {
+  results <- omPCRBatch(simModel,
+                        simPath,
+                        override=mpara,
+                        nestedList=nlist,
+                        logdir=expName,
+                        project=title,
+                        details = FALSE,
+                        expName=expName)
+}
+
+results$sprop <- results$par_startRatio
+results$prop <- results$ratio
+results$sratio <- results$sprop/(1-results$sprop)
+results$slratio <- log(results$sratio)
+results$ratio <- results$prop/(1-results$prop)
+results$lratio <- log(results$ratio)
+results$sT <- results$par_startTemplate 
+results$sA <- results$sT * results$sprop
+results$sB <- results$sT * (1- results$sprop)
+results$difA <- results$totalA -results$sA
+results$difB <- results$totalB -results$sB
+results$difT <- results$totalT -results$sT
+results$effA <- results$difA/results$sA 
+results$effB <- results$difB/results$sB
+results$effT <- results$difT/results$sT
+
+results <- results  %>%
+  mutate(homo = AaAs.c +  BaBs.c +  AaAsPoly.c + BaBsPoly.c ,
+         hetero = AaBs.c + AsBa.c + AaBsPoly.c + AsBaPoly.c,
+         homoA = AaAs.c + AaAsPoly.c,
+         homoB = BaBs.c + BaBsPoly.c)
+```
+
+`para$stopTime <- para$cycle_time * para$cycle_ma` is reproduced as written: `cycle_ma` is a typo for `cycle_max`, and because `para` is a data frame, partial matching resolves `para$cycle_ma` to `cycle_max`, so the line does what it appears to do. It is left unchanged rather than "corrected", since altering it cannot change the result and any edit risks changing it.
+
+The design grid actually present in the stored results is reported below rather than restated from the legend.
+
+```{r}
+#| label: figS6-design-grid
+
+design <- data.frame(
+  quantity = c("total template amount sT (M)",
+               "starting proportion",
+               "heteroduplex association rate k1_hetero (1/M/s)",
+               "homoduplex rehybridisation rate k1_homo (1/M/s)",
+               "cycles simulated"),
+  n_levels = c(length(unique(results$sT)),
+               length(unique(results$sprop)),
+               length(unique(results$par_hetero_k1)),
+               1L,
+               length(unique(results$cycle))),
+  values = c(paste(format(range(results$sT), digits = 3), collapse = " to "),
+             paste(format(range(results$sprop)), collapse = " to "),
+             paste(format(sort(unique(results$par_hetero_k1)), scientific = TRUE),
+                   collapse = ", "),
+             format(stdPara$rehybA_k1, scientific = TRUE),
+             paste(sort(unique(results$cycle)), collapse = ", "))
+)
+knitr::kable(design, row.names = FALSE,
+             caption = paste("Single-cycle design grid read back from",
+                             sim_scycle, "results.rds. The lowest template level",
+                             "is 1e-18 M, i.e. effectively zero, and is excluded",
+                             "from the per-template analyses of panel d."))
+```
+
+The figure itself shows this design as an annotated schematic; that drawing was prepared outside R. What is generated from code here is the design grid and the five derived quantities, which panels b and c plot.
+
+------------------------------------------------------------------------
+
+# Panel b — Equal association rates (k₁_hetero = 1×10⁶ M⁻¹s⁻¹)
+
+With the heteroduplex rate equal to the homoduplex rate, re-annealing is blind to which strand it captures. Homoduplex formation is therefore *minimal* and heteroduplex formation *maximal* at equimolar input, simply because at 1:1 the probability that a given strand meets a non-complementary partner is highest. The two effects are exactly complementary, so their sum — total re-annealing — and with it amplification efficiency, is flat in the starting proportion. This is the control case: heteroduplexes form abundantly and yet no proportion-dependent efficiency difference, and hence no ratio distortion, arises. Efficiency does fall with increasing total template amount (colour), because re-annealing competes with primer annealing more strongly when more strands are present.
+
+```{r}
+#| label: figS6-panel-b
+#| fig-cap: "Panel b. Equal association rates. Left to right: homoduplex re-annealing, heteroduplex re-annealing, total re-annealing, total amplification efficiency, and new amplicon yield, each against starting template proportion. Colour encodes the total template amount."
+#| fig-width: 12
+#| fig-height: 2.8
+
+results <- results  %>%
+  mutate(homo = AaAs.c +  BaBs.c +  AaAsPoly.c + BaBsPoly.c ,
+         hetero = AaBs.c + AsBa.c + AaBsPoly.c + AsBaPoly.c)
+
+sel <- results[results$par_hetero_k1==1e6,]
+
+plist <- list()
+
+plist[[1]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homo-2*difT)/sT*100,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of homoduplex (%)")
+
+plist[[2]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=hetero/sT*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of heteroduplex (%)")
+
+plist[[4]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homo-2*difT+hetero)/sT*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("total re-annealing (%)")
+
+plist[[5]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=effT*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("total efficiency (%)")
+
+plist[[6]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=difT,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")+ xlab("proportion") + ylab("new amplicons (M)")
+
+panel_b <- ggarrange(plotlist=plist[c(1,2,4,5,6)],ncol=5,nrow=1,common.legend=TRUE,legend="right")
+panel_b
+```
+
+`plist[[3]]` is skipped in the source (it was the heteroduplex-share panel, commented out), and the arrangement selects elements 1, 2, 4, 5, 6. The gap in the index is preserved so that the element numbering matches the source notebook.
+
+------------------------------------------------------------------------
+
+# Panel c — Reduced heteroduplex association rate (k₁_hetero = 3×10⁵ M⁻¹s⁻¹)
+
+When heteroduplexes form less readily than homoduplexes — the physically realistic case, since a heteroduplex carries the mismatch of the alternatively spliced segment — the compensation of panel b breaks down. Heteroduplex formation is still maximal at equimolar input, but it no longer replaces homoduplex formation one for one, so total re-annealing is *lowest* at 1:1 and amplification efficiency is correspondingly *highest* there. Efficiency now depends on the starting proportion.
+
+The top row repeats the five total-template views of panel b at the reduced rate; the two rows below decompose the same simulations into template A and template B. The decomposition is what shows that the efficiency penalty is not shared equally: each template's heteroduplex burden is scaled by the *other* template's abundance, so the minority template loses proportionally less.
+
+```{r}
+#| label: figS6-panel-c-total
+#| fig-cap: "Panel c, top rows. Total-template view at k1_hetero = 3e5: homoduplex, heteroduplex and total re-annealing, total efficiency and new amplicon yield against starting proportion, coloured by total template amount."
+#| fig-width: 12
+#| fig-height: 2.8
+
+sel <- results[results$par_hetero_k1==3e5,]
+
+plist <- list()
+
+plist[[1]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homo-2*difT)/sT*100,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of homoduplex (%)")
+
+plist[[2]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=hetero/sT*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of heteroduplex (%)")
+
+plist[[4]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homo-2*difT+hetero)/sT*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("total re-annealing (%)")
+
+plist[[5]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=effT*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("total efficiency (%)")
+
+plist[[6]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=difT,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")+ xlab("proportion") + ylab("new amplicons (M)")
+
+panel_c_total <- ggarrange(plotlist=plist[c(1,2,4,5,6)],ncol=5,nrow=1,common.legend=TRUE,legend="right")
+panel_c_total
+```
+
+```{r}
+#| label: figS6-panel-c-templateA
+#| fig-cap: "Panel c, template A. Homoduplex re-annealing, heteroduplex re-annealing, total re-annealing and amplification efficiency of template A alone, at k1_hetero = 3e5, against starting proportion."
+#| fig-width: 10
+#| fig-height: 2.8
+
+### oonly template A
+
+sel <- results[results$par_hetero_k1==3e5,]
+
+plist <- list()
+
+plist[[1]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homoA-2*difA)/sA*100,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of homoduplex (%)")
+
+plist[[2]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(hetero/2)/sA*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of heteroduplex (%)")
+
+plist[[3]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=hetero/(homoA*2 + hetero),group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(0,1) + xlab("proportion") + ylab("template A heteroduplex (%)")
+
+plist[[4]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homoA-2*difA+hetero/2)/sA*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("total re-annealing (%)")
+
+plist[[5]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=effA*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("efficiency (%)")
+
+plist[[6]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=difA,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")+ xlab("proportion") + ylab("new amplicons (M)")
+
+panel_c_A <- ggarrange(plotlist=plist[c(1,2,4,5)],ncol=4,nrow=1,common.legend=TRUE,legend="right")
+panel_c_A
+```
+
+```{r}
+#| label: figS6-panel-c-templateB
+#| fig-cap: "Panel c, template B. The same four views for template B. Comparing with template A shows the efficiency asymmetry: the two curves are mirror images about the equimolar point."
+#| fig-width: 10
+#| fig-height: 2.8
+
+### only template B
+
+sel <- results[results$par_hetero_k1==3e5,]
+
+plist <- list()
+
+plist[[1]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homoB-2*difB)/sB*100,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of homoduplex (%)")
+
+plist[[2]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(hetero/2)/sB*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("re-annealing of heteroduplex (%)")
+
+plist[[3]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=hetero/(homoA*2 + hetero),group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(0,1) + xlab("proportion") + ylab("template A heteroduplex (%)")
+
+plist[[4]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=(homoB-2*difB+hetero/2)/sB*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("total re-annealing (%)")
+
+plist[[5]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=effB*100,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal") + ylim(-1,100) + xlab("proportion") + ylab("efficiency (%)")
+
+plist[[6]] <- ggplot() + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(data=sel,aes(x=par_startRatio,y=difB,group=interaction(par_hetero_k1,par_startTemplate),col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")+ xlab("proportion") + ylab("new amplicons (M)")
+
+panel_c_B <- ggarrange(plotlist=plist[c(1,2,4,5)],ncol=4,nrow=1,common.legend=TRUE,legend="right")
+panel_c_B
+```
+
+The template-B block reuses `plist[[3]]` from the template-A block unchanged (`hetero/(homoA*2 + hetero)`, labelled "template A heteroduplex"). That element is not part of the assembled panel — the arrangement selects 1, 2, 4, 5 — so the copy has no effect on the figure and is left as written rather than silently retargeted to `homoB`.
+
+------------------------------------------------------------------------
+
+# Panel d — Proportion-dependent efficiency differences drive equimolar drift
+
+Panel d is the conclusion of the argument. Its three columns are the three heteroduplex association rates, 1×10⁶, 6×10⁵ and 3×10⁵ M⁻¹s⁻¹. The top row plots the two per-template efficiencies against one another: at equal rates the locus collapses onto a single point per template amount (the efficiencies are identical at every proportion), and it opens up as the heteroduplex rate falls. The middle row shows the efficiency ratio effA/effB on a logarithmic axis, which deviates from 1 in a proportion-dependent, sign-changing way. The bottom row is the consequence for measurement: the residual between the amplicon proportion after one cycle and the input proportion, which traces the S-shaped bias profile of Figure 2G in miniature. It crosses zero at the equimolar point, where both templates face identical re-annealing competition.
+
+```{r}
+#| label: figS6-panel-d
+#| fig-cap: "Panel d. Columns: k1_hetero = 1e6, 6e5, 3e5. Top row: template A efficiency against template B efficiency, coloured by starting proportion. Middle row: efficiency ratio effA/effB against starting proportion (log axis), coloured by total template amount. Bottom row: residual (amplicon proportion minus template proportion) against template proportion."
+#| fig-width: 11
+#| fig-height: 8
+
+plist <- list()
+
+sel <- results[results$par_hetero_k1==1e6,]
+
+plist[[1]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=effA/effB,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")   + xlab("proportion") + ylab(" efficiency ratio (template A/template B)") + scale_y_log10(limits = c(0.5,2))
+
+plist[[2]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=effA,y=effB,group=sprop,col=sprop)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  +
+  labs(x="template A efficiency", y="template B efficiency", color = "proportion")
+
+plist[[7]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=sprop,y=prop-sprop,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  +
+  labs(x="template proportion", y="residuals (amplicon proportion - template proportion", color = "proportion")+ ylim(-0.015,+0.015)
+
+sel <- results[results$par_hetero_k1==6e5,]
+
+plist[[3]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=effA/effB,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")   + xlab("proportion") + ylab(" efficiency ratio (template A/template B)") + scale_y_log10(limits = c(0.5,2))
+
+plist[[4]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=effA,y=effB,group=sprop,col=sprop)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  +
+  labs(x="template A efficiency", y="template B efficiency", color = "proportion")
+
+plist[[8]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=sprop,y=prop-sprop,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  +
+labs(x="template proportion", y="residuals (amplicon proportion - template proportion", color = "proportion")+ ylim(-0.015,+0.015)
+
+sel <- results[results$par_hetero_k1==3e5,]
+
+plist[[5]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=par_startRatio,y=effA/effB,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")   + xlab("proportion") + ylab(" efficiency ratio (template A/template B)") + scale_y_log10(limits = c(0.5,2))
+
+plist[[6]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=effA,y=effB,group=sprop,col=sprop)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  +
+  labs(x="template A efficiency", y="template B efficiency", color = "proportion")
+
+plist[[9]] <- ggplot(data=sel) + theme_rpcr() + theme_figure + scale_color_viridis(discrete=FALSE) +
+  geom_line(aes(x=sprop,y=prop-sprop,group=sT,col=sT)) +
+  theme(legend.position = "right",
+        legend.direction = "vertical",
+        legend.box = "horizontal")  +
+labs(x="template proportion", y="residuals (amplicon proportion - template proportion", color = "proportion") + ylim(-0.015,+0.015)
+
+# REPAIR: in the source notebook this arrangement was printed but never
+# assigned, and the ggsave() call that followed wrote the *previous* chunk's
+# `plot` object (the template-B arrangement) under the panel-d file name. The
+# arrangement is assigned here so that the exported file is the panel that was
+# built.
+panel_d <- ggarrange(
+  ggarrange(plotlist=plist[c(2,4,6)],ncol=3,nrow=1,common.legend=TRUE,legend="right"),
+  ggarrange(plotlist=plist[c(1,3,5)],ncol=3,nrow=1,common.legend=TRUE,legend="right"),
+  ggarrange(plotlist=plist[c(7,8,9)],ncol=3,nrow=1,common.legend=TRUE,legend="right"),
+  nrow=3)
+
+panel_d
+```
+
+Two further edits to this block are worth recording. The `labs(...,, color = ...)` calls in the source contain a doubled comma, which R parses as an empty argument and `labs()` tolerates; the duplicate comma is removed because it carries no information. And the exploratory material that followed in the notebook — `plot_ly()` efficiency surfaces and a series of `nlsLM()` fits of candidate analytical drift functions (`propdrift`, `drift`, `pdrift`, `rdrift`, `sdrift`, `odrift`, `ndrift`) — is not carried over: none of it produces a panel of this figure, it requires `plotly` and `minpack.lm` at render time, and several of those fits are superseded by the analytical calibration model of Figure 3.
+
+The claim that the residual crosses zero at equimolar input, and that the efficiency ratio departs from 1 only when the heteroduplex rate is reduced, is checked here against the data rather than asserted.
+
+```{r}
+#| label: figS6-drift-check
+
+check <- do.call(rbind, lapply(sort(unique(results$par_hetero_k1)), function(k) {
+  s <- results[results$par_hetero_k1 == k & results$sT > min(results$sT), ]
+  eq <- s[abs(s$sprop - 0.5) < 1e-9, ]
+  data.frame(
+    k1_hetero = format(k, scientific = TRUE),
+    max_abs_efficiency_ratio_dev = max(abs(s$effA / s$effB - 1), na.rm = TRUE),
+    max_abs_residual = max(abs(s$prop - s$sprop), na.rm = TRUE),
+    max_abs_residual_at_equimolar = max(abs(eq$prop - eq$sprop), na.rm = TRUE)
+  )
+}))
+knitr::kable(check, digits = 6, row.names = FALSE,
+             caption = paste("Per heteroduplex association rate, over all template",
+                             "amounts above the near-zero level and all starting",
+                             "proportions: largest departure of the per-template",
+                             "efficiency ratio from 1, largest residual between",
+                             "amplicon and template proportion, and the residual at",
+                             "the equimolar point."))
+```
+
+------------------------------------------------------------------------
+
+# Panel e — Schematic of the inhibition mechanism
+
+Panel e is a **schematic** and has no R source in this repository. It summarises the mechanism that panels b–d establish numerically: re-annealing of amplicon strands inhibits amplification because a duplex is not a substrate for primer extension, but heteroduplexes inhibit *less* than homoduplexes when their association rate is lower. The minority template holds a proportionally larger share of its strands in heteroduplexes and therefore suffers less inhibition, giving it the higher effective efficiency. The result is a systematic pull of the measured ratio toward equimolarity whose magnitude grows as k₁_hetero falls relative to k₁_homo.
+
+The drawing was prepared outside R and is not generated from code here.
+
+------------------------------------------------------------------------
+
+# Save figure
+
+```{r}
+#| label: save-figures
+
+# REPAIR: the source notebook wrote these with
+# ggsave(paste0(fpath, "name.pdf"), ...), which depends on fpath carrying a
+# trailing slash and bypasses the project's save wrapper. All writes now go
+# through psave() into fpath. Sizes are those of the source calls; the panel-d
+# export used the same 6 x 3 cm as the single-row strips, which is too small
+# for a 3 x 3 arrangement, so it is written at 18 x 12 cm.
+psave("ratioPCR_figure_S6b",          panel_b,       width = 6,  height = 3,  dpi = 600, units = "cm", device = "pdf")
+psave("ratioPCR_figure_S6c",          panel_c_total, width = 6,  height = 3,  dpi = 600, units = "cm", device = "pdf")
+psave("Hetero_sCycle_3e5_templateA",  panel_c_A, path = cpath, width = 6,  height = 3,  dpi = 600, units = "cm", device = "pdf")
+psave("Hetero_sCycle_3e5_templateB",  panel_c_B, path = cpath, width = 6,  height = 3,  dpi = 600, units = "cm", device = "pdf")
+psave("ratioPCR_figure_S6d",          panel_d,       width = 18, height = 12, dpi = 600, units = "cm", device = "pdf")
+```

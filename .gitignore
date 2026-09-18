@@ -2,4 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
-documents/
+
+# documents/ is tracked (sources + input data). Exceptions:
+documents/figures/
+documents/rPCRsim/*/model/
+documents/rPCRsim/*/log/
+documents/extdata/results 2026-04-28 .rds
+*.html

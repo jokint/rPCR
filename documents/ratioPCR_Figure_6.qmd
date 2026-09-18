@@ -1,0 +1,242 @@
+---
+title: "ratioPCR Figure 6 — Application of rPCR to DM1 patient-derived myoblasts and drug response analysis"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+The supplied legend file carries only the figure title for the main figures; the panel-level description is in the Results text. Both are quoted verbatim.
+
+> **Figure 6: Application of rPCR to DM1 patient-derived myoblasts and drug response analysis.**
+
+> To demonstrate biological relevance, we applied rPCR to a cellular model of myotonic dystrophy type 1 (DM1). A high-throughput screening workflow was established in which immortalised human myoblasts are differentiated, treated with compounds, imaged for viability assessment, and subjected to one-step RT-rPCR directly from lysate in 384-well format, yielding calibrated splicing proportions within approximately one day of cell harvest (Figure 6A).
+>
+> rPCR quantification of DM1 patient-derived and healthy control differentiated myotubes confirmed pronounced splicing shifts for all three MBNL1-regulated targets. All three assays detected consistent mis-splicing in DM1 cells relative to controls, both before and after calibration (Figure 6B). The concordance between uncalibrated and calibrated measurements demonstrates that the disease-associated splicing shift is large enough to be reliably detected by uncalibrated rPCR, supporting its use as a semiquantitative screening readout in contexts where absolute proportion estimates are not required.
+>
+> Treatment with furamidine, a diamidine compound previously shown to partially restore MBNL1-regulated splicing, resulted in dose-dependent rescue of exon inclusion for KIF13A and SYNE1 across the concentration range of 0.1–10 µM, with minimal effects on NUMA1 (Figure 6C).
+
+------------------------------------------------------------------------
+
+# Setup
+
+`Figure_settings.R` provides the package attachments, the project paths and the `psave()` wrapper. The source script additionally attached `broom` and `AICcmodavg`; neither is called anywhere in it, so both are omitted here.
+
+The calibration used for both panels is fitted once, from `documents/extdata/myotubes_calibration.xlsx`, and then applied to the myotube and to the drug-treated plates. Two points on that file are worth recording. First, it is byte-identical to the reference calibration export `20191120AS calibration.xlsx` (same md5) — despite its name it does not contain myotube RNA, it is the in-vitro reference standard series. Second, that is the intended use: the four calibration parameters (α, rᵢ, rₑ, γ) describe probe intensity, probe cross-reactivity and ratio-dependent amplification of the *assay*, are determined once on a reference dilution series, and are then applied to biological samples through `rpcr_batchFit()`. The panel therefore reports myotube proportions calibrated against the assay's reference series, which is what the legend claims; only the file name is misleading. `qual = ""` means every sample in that file is used as a standard.
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+library(patchwork)
+
+# Panel B: DM1 and healthy control differentiated myotubes
+df <- rpcr_import(file.path(pp, file.path("documents", "extdata", "DM1_and_WT_myotubes.xlsx")))
+
+# Calibration reference series (see note above)
+df0 <- rpcr_import(file.path(pp, file.path("documents", "extdata", "myotubes_calibration.xlsx")))
+
+# Panel C: furamidine dose response and its plate metadata
+drug      <- rpcr_import(file.path(pp, file.path("documents", "extdata", "DM1_myotubes_drugs.xlsx")))
+drug_meta <- readxl::read_excel(file.path(pp, file.path("documents", "extdata", "DM1_myotubes_drugs_meta.xlsx")), col_names = TRUE)
+```
+
+------------------------------------------------------------------------
+
+# Panel A — high-throughput screening workflow
+
+Panel A is a schematic of the screening workflow: immortalised human myoblasts are seeded and differentiated into myotubes, treated with compounds, imaged for viability assessment, and then lysed for one-step RT-rPCR directly from lysate in 384-well format, so that calibrated splicing proportions are available within approximately one day of cell harvest.
+
+**This panel is a hand-drawn schematic. It is not generated from code in this repository and no plot is produced for it here.** No R script in `documents/scripts` produces it, and no input image for it is present in `documents/extdata`.
+
+------------------------------------------------------------------------
+
+# Panel B — DM1 versus control myotubes, uncalibrated and calibrated
+
+Both readouts are shown side by side for each of the three MBNL1-regulated targets: the apparent proportion ψₐ read directly from the fluorescence ratio, and the calibrated proportion ψ_c after correction with the four-parameter model. The comparison is the point of the panel — if the disease-associated shift survives without calibration, uncalibrated rPCR is a usable semiquantitative screening readout, and only absolute proportion estimates require the calibration step. Wells G and H carry the DM1 patient-derived line, wells O and P the healthy control; columns beyond 20 are excluded because they hold other samples on the same plate. Bars are means, error bars ± 1 SD.
+
+```{r}
+#| label: fig6-B
+#| fig-width: 4.5
+#| fig-height: 1.4
+
+df[grepl(" 0% ", df$sample), ]$sample <- 0
+df[grepl(" 50% ", df$sample), ]$sample <- 50
+df[grepl(" 100% ", df$sample), ]$sample <- 100
+
+calibration <- rpcr_calibrate(df0, qual = "", rtype = "ip", roff = c(-15, 5))
+df[df$target == "KIF13a", ]$target <- "KIF13A"
+df1 <- rpcr_batchFit(df, calib = calibration, rtype = "ip", roff = c(-15, 5))
+
+df2 <- df1[grepl("G|H|O|P", df1$well), ]
+
+df3 <- na.omit(df2[as.numeric(substring(df2$well, 2)) < 21, ])
+
+df4 <- df3 %>%
+  pivot_longer(
+    cols = c(aprop, cprop),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+df4$sample <- "Ctr."
+df4[grepl("G|H", df4$well), "sample"] <- "DM1"
+
+df4$sample <- factor(df4$sample, levels = c("Ctr.", "DM1"))
+plot1 <- ggplot(data = df4) +
+  stat_summary(aes(sample, value),
+               fun = "mean",
+               geom = "bar",
+               fill = "grey80", col = "black") +
+  stat_summary(aes(x = sample, y = value),
+               fun.data = mean_sdl,
+               fun.args = list(mult = 1),
+               geom = "errorbar",
+               width = 0.2,
+               position = position_dodge(0.9)) +
+  facet_grid(. ~ target + variable, axes = "all") +
+  ylab("proportion") +
+  theme_rpcr() +
+  theme(axis.text = element_text(size = 6, face = "plain"),
+        panel.grid.major = element_blank(),
+        axis.title.y = element_text(size = 8),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(),
+        strip.text.x = element_text(size = 6),
+        strip.text.y = element_blank(),
+        panel.spacing.x = unit(c(0, 1, 0, 1, 0), "lines"),
+        legend.position = "bottom")
+
+plot1
+```
+
+The group means behind the panel, printed so that the size of the disease-associated shift can be read on both scales rather than inferred from the bars.
+
+```{r}
+#| label: fig6-B-summary
+
+df4 %>%
+  group_by(target, variable, sample) %>%
+  summarise(n = sum(!is.na(value)),
+            mean = mean(value, na.rm = TRUE),
+            sd   = sd(value, na.rm = TRUE),
+            .groups = "drop") %>%
+  knitr::kable(digits = 3,
+               caption = "DM1 vs control myotubes: apparent (aprop) and calibrated (cprop) inclusion proportion")
+```
+
+------------------------------------------------------------------------
+
+# Panel C — furamidine dose response
+
+Differentiated DM1 myotubes were treated across 0.1–10 µM furamidine and read out with the same one-step RT-rPCR workflow, calibrated with the same reference parameters. The dose axis is logarithmic; each facet is one assay. Only the calibrated proportion is plotted, because this panel reports the size of the rescue rather than the calibration question addressed in panel B. The expected result is a dose-dependent increase in exon inclusion for KIF13A and SYNE1 and little movement for NUMA1, i.e. the gene-specific sensitivity of MBNL1-regulated targets to diamidine treatment.
+
+```{r}
+#| label: fig6-C
+#| fig-width: 4.5
+#| fig-height: 1.8
+
+drug_aprop <- rpcr_batchFit(drug, calib = calibration, rtype = "ip", roff = c(-15, 5))
+drug_merge <- merge(drug_aprop, drug_meta)
+df5 <- na.omit(drug_merge)
+
+df5 <- df5 %>%
+  pivot_longer(
+    cols = c(aprop, cprop),
+    names_to = "variable",
+    values_to = "value")
+
+plot2 <- ggplot(data = df5[df5$drug == "Fura" & df5$variable == "cprop", ]) +
+  stat_summary(aes(x = dose, y = value),
+               fun = "mean",
+               geom = "bar",
+               fill = "grey80", col = "black") +
+  stat_summary(aes(x = dose, y = value),
+               fun.data = mean_sdl,
+               fun.args = list(mult = 1),
+               geom = "errorbar",
+               width = 0.2,
+               position = position_dodge(0.9)) +
+  facet_grid(variable ~ target, axes = "all") + scale_x_continuous(trans = 'log10') +
+  xlab("furamidine concentration [uM]") +
+  ylab("calibrated proportion") +
+  theme_rpcr() +
+  theme(axis.text = element_text(size = 6, face = "plain", color = "black"),
+        panel.grid.major = element_blank(),
+        axis.title = element_text(size = 8),
+        strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        legend.position = "bottom") + ylim(0, 0.6)
+
+plot2
+```
+
+```{r}
+#| label: fig6-C-summary
+
+df5 %>%
+  filter(drug == "Fura", variable == "cprop") %>%
+  group_by(target, dose) %>%
+  summarise(n = sum(!is.na(value)),
+            mean = mean(value, na.rm = TRUE),
+            sd   = sd(value, na.rm = TRUE),
+            .groups = "drop") %>%
+  knitr::kable(digits = 3,
+               caption = "Furamidine dose response: calibrated inclusion proportion per assay")
+```
+
+------------------------------------------------------------------------
+
+# Assembled figure
+
+Panels B and C are stacked with `patchwork`; the tag levels produced here are `A`/`B` because the schematic in panel A is added at layout stage and is not part of the R object.
+
+```{r}
+#| label: fig6-assembled
+#| fig-width: 4.5
+#| fig-height: 2.8
+
+plot3 <- plot1 / plot2 +
+  plot_layout(heights = c(1, 1.5)) +
+  plot_annotation(tag_levels = "A")
+
+plot3
+```
+
+------------------------------------------------------------------------
+
+# Save figure
+
+```{r}
+#| label: save-figures
+
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+
+psave("ratioPCR_figure_6B",  plot1, width = 11.4, height = 3,   dpi = 600)
+psave("ratioPCR_figure_6C",  plot2, width = 11.4, height = 4,   dpi = 600)
+psave("ratioPCR_figure_6BC", plot3, width = 11.4, height = 7,   dpi = 600)
+
+cat("Figure 6 outputs written to:", fpath, "\n")
+```

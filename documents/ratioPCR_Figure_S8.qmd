@@ -1,0 +1,478 @@
+---
+title: "ratioPCR Figure S8 — Pearson correlation between rPCR and dPCR inclusion proportion measurements across all three assays"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+<!-- ============================================================= -->
+<!-- ratioPCR_Figure_S8.qmd                                         -->
+<!-- Self-contained rebuild of Supplementary Figure S8              -->
+<!-- (ISCIENCE-D-26-02393_R2).                                      -->
+<!-- ============================================================= -->
+
+# Figure legend
+
+> **Supplementary Figure S8: Pearson correlation between rPCR and dPCR
+> inclusion proportion measurements across all three assays**
+>
+> Correlation between calibrated rPCR inclusion proportions and dPCR-derived
+> inclusion proportions for KIF13A, NUMA1, and SYNE1. Each point represents the
+> mean proportion across replicates for one reference mixture (n = 11 reference
+> mixtures spanning 0–100% inclusion). Error bars show standard error of the
+> mean. Solid lines show linear regression fits; shaded areas indicate 95%
+> confidence intervals. Pearson correlation coefficients and p-values are shown
+> in each panel. KIF13A and SYNE1 show near-perfect correlation (R = 1, p <
+> 2.5×10⁻¹³), while NUMA1 shows slightly reduced correlation (R = 0.97, p =
+> 4.2×10⁻⁷), consistent with its greater measurement scatter (RSE = 0.071,
+> Figure 5C).
+
+------------------------------------------------------------------------
+
+# Setup
+
+This figure and main Figure 5C are produced by the same script:
+Figure 5C is its `panelE`
+(theoretical against measured proportion per method) and Figure S8 is its
+`panelSup` (rPCR against dPCR, `plot3_K`, `plot3_N`, `plot3_S`). The data
+preparation is therefore identical in the two documents and is repeated here so
+that this document is self-contained.
+
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+library(dplyr)
+
+ppath <- file.path(pp, "documents", "extdata", "dPCR")
+
+# KIF13A: rPCR run and dPCR partition summary of the same reference series
+import_K <- rpcr_import(file.path(ppath, "rPCR_20250916_JK KIF13A dPCR comparison_20250918_125346.xlsx"))
+dPCR_K   <- read.csv(file.path(ppath, "rPCR_20250916 KIF13A_analysis_18_09_2025_17_22_21_UTC+02_00.csv"), skip = 1)
+
+# NUMA1
+import_N <- rpcr_import(file.path(pp, "documents", "extdata", "rPCR_NUMA1_compare.xlsx"))
+dPCR_N   <- read.csv(file.path(pp, "documents", "extdata", "dPCR_NUMA1_compare.csv"), sep = ";", header = FALSE)
+
+# SYNE1
+import_S <- rpcr_import(file.path(pp, "documents", "extdata", "rPCR_SYNE1_compare.xlsx"))
+dPCR_S   <- read.csv(file.path(ppath, "dPCR_SYNE1_compare.csv"), skip = 1)
+
+# Collector for the correlation coefficients reported by the source script
+cor_all <- data.frame()
+```
+
+------------------------------------------------------------------------
+
+# Panel — KIF13A
+
+Each of the 11 reference mixtures is measured by both methods on the same
+material. The point plotted is the replicate mean per mixture, with the SEM in
+both directions, so that the regression is fitted on the quantity the two
+methods are meant to agree on rather than on the replicate scatter. The
+identity line is drawn as a dotted reference; agreement with it is what
+distinguishes correlation from accuracy, which is reported separately as the
+RSE in Figure 5C.
+
+The rPCR side uses the `lbKIF13A` reference series of the dPCR-comparison
+plate. A first calibration of the `laKIF13A` series in the source script is
+overwritten two statements later without being used, and has been dropped as
+dead code.
+
+```{r}
+#| label: figS8-kif13a
+
+target <- "KIF13A"
+
+import <- import_K
+dPCR   <- dPCR_K
+
+### correlation
+df2 <- dPCR[dPCR$"Target..Name." == "Incl" & dPCR$"Sample.NTC.Control" != "NTC", c("Well", "Edited.fraction")]
+df2$row <- substring(df2$Well, 1, 1)
+df2$col <- as.numeric(substring(df2$Well, 2))
+seriesA <- c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1)
+seriesB <- seq(0, 1, 0.1)
+
+df2$tprop <- c(rep(seriesA, 4), rep(seriesB, 4))
+df2$cprop <- as.numeric(gsub("%", "", df2$"Edited.fraction")) / 100
+df2$delta <- df2$cprop - df2$tprop
+df2 <- df2[substr(df2$Well, 1, 1) %in% c("E", "F", "G", "H"), ]
+
+res <- rpcr_calibrate(import[import$target == "lbKIF13A", ], qual = "Cal", output = "details")
+df1 <- res$summary
+df1 <- rpcr_calibDetect(df1[df1$sample != "NTC", ])
+df1$delta <- df1$cprop - df1$tprop
+
+df1$method <- "rPCR"
+df2$method = "dPCR"
+colnames(df2)[colnames(df2) == "Well"] <- "well"
+
+df1_mean <- df1 %>% group_by(tprop) %>% summarize(mean_cprop1 = mean(cprop, na.rm = TRUE))
+df2_mean <- df2 %>% group_by(tprop) %>% summarize(mean_cprop2 = mean(cprop, na.rm = TRUE))
+
+merged_means <- inner_join(df1_mean, df2_mean, by = "tprop")
+cor_all <- rbind(cor_all, data.frame(target = "KIF13A", type = "RvsD", R = cor(merged_means$mean_cprop1, merged_means$mean_cprop2)))
+cor_all <- rbind(cor_all, data.frame(target = "KIF13A", type = "RvsT", R = cor(df1$tprop, df1$cprop)))
+cor_all <- rbind(cor_all, data.frame(target = "KIF13A", type = "DvsT", R = cor(df2$tprop, df2$cprop)))
+
+stats1 <- df1 %>% group_by(tprop) %>%
+  summarize(m1 = mean(cprop), sd1 = sd(cprop) / sqrt(n())) %>%
+  mutate(tprop = round(tprop, 2))
+stats2 <- df2 %>% group_by(tprop) %>%
+  summarize(m2 = mean(cprop), sd2 = sd(cprop) / sqrt(n())) %>%
+  mutate(tprop = round(tprop, 2))
+
+plot_data <- inner_join(stats1, stats2, by = "tprop")
+plot_data_K <- plot_data
+
+plot3_K <- ggplot(plot_data, aes(x = m1, y = m2)) +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  # Fehlerbalken für beide Achsen
+  geom_errorbar(aes(ymin = m2 - sd2, ymax = m2 + sd2), width = 0.02, color = "gray") +
+  geom_errorbar(aes(xmin = m1 - sd1, xmax = m1 + sd1), height = 0.02, color = "gray") +
+  # Mittelpunkte
+  geom_point(color = "black", size = 0.5, alpha = 0.2) +
+  # Regressionslinie
+  geom_smooth(method = "lm", color = "grey50", se = TRUE) +
+  # Korrelationskoeffizient und p-Wert automatisch einblenden
+  stat_cor(method = "pearson", label.x = 0.1, label.y = 0.9) +
+  labs(x = "proportion (rPCR)", y = "proportion (dPCR)") +
+  theme_rpcr()
+```
+
+```{r}
+#| label: figS8-kif13a-plot
+#| fig-width: 2.4
+#| fig-height: 2.4
+
+plot3_K
+```
+
+------------------------------------------------------------------------
+
+# Panel — NUMA1
+
+```{r}
+#| label: figS8-numa1
+
+target <- "NUMA1"
+
+import <- import_N
+import <- import[import$sample != "NTC" & import$target == "cNUMA1", ]
+calib <- rpcr_calibrate(import, qual = "Cal2_")
+res <- rpcr_batchFit(import, calib = calib)
+res <- rpcr_calibDetect(res, qual = "Cal2_")
+
+df1 <- res
+df1 <- df1[grep("Cal2", df1$sample), ]
+df1$delta <- df1$cprop - df1$tprop
+
+dPCR <- dPCR_N
+tprop <- c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1)
+tprop <- c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)
+colnames(dPCR) <- c("well", "dil", tprop)
+
+df2 <- dPCR[dPCR$dil == "dilB", ] %>%
+  pivot_longer(
+    cols = as.character(tprop),
+    names_to = "tprop",
+    values_to = "cprop"
+  )
+df2$tprop <- as.numeric(df2$tprop)
+df2$delta <- df2$cprop - df2$tprop
+
+df1$method <- "rPCR"
+df2$method = "dPCR"
+
+df1_mean <- df1 %>% group_by(tprop) %>% summarize(mean_cprop1 = mean(cprop, na.rm = TRUE))
+df2_mean <- df2 %>% group_by(tprop) %>% summarize(mean_cprop2 = mean(cprop, na.rm = TRUE))
+
+merged_means <- inner_join(df1_mean, df2_mean, by = "tprop")
+cor_all <- rbind(cor_all, data.frame(target = "NUMA1", type = "RvsD", R = cor(merged_means$mean_cprop1, merged_means$mean_cprop2)))
+cor_all <- rbind(cor_all, data.frame(target = "NUMA1", type = "RvsT", R = cor(df1$tprop, df1$cprop)))
+cor_all <- rbind(cor_all, data.frame(target = "NUMA1", type = "DvsT", R = cor(df2$tprop, df2$cprop)))
+
+stats1 <- df1 %>% group_by(tprop) %>%
+  summarize(m1 = mean(cprop), sd1 = sd(cprop) / sqrt(n())) %>%
+  mutate(tprop = round(tprop, 2))
+stats2 <- df2 %>% group_by(tprop) %>%
+  summarize(m2 = mean(cprop), sd2 = sd(cprop) / sqrt(n())) %>%
+  mutate(tprop = round(tprop, 2))
+
+plot_data <- inner_join(stats1, stats2, by = "tprop")
+plot_data_N <- plot_data
+
+plot3_N <- ggplot(plot_data, aes(x = m1, y = m2)) +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  geom_errorbar(aes(ymin = m2 - sd2, ymax = m2 + sd2), width = 0.02, color = "gray") +
+  geom_errorbar(aes(xmin = m1 - sd1, xmax = m1 + sd1), height = 0.02, color = "gray") +
+  geom_point(color = "black", size = 0.5, alpha = 0.2) +
+  geom_smooth(method = "lm", color = "grey50", se = TRUE) +
+  stat_cor(method = "pearson", label.x = 0.1, label.y = 0.9) +
+  labs(x = "proportion (rPCR)", y = "proportion (dPCR)") +
+  theme_rpcr()
+```
+
+```{r}
+#| label: figS8-numa1-plot
+#| fig-width: 2.4
+#| fig-height: 2.4
+
+plot3_N
+```
+
+------------------------------------------------------------------------
+
+# Panel — SYNE1
+
+The SYNE1 dPCR export reports the *exclusion* target, so the inclusion
+proportion is `1 − edited fraction`. Calibration of the rPCR side uses four
+standards (`Cal10`, `Cal40`, `Cal60`, `Cal90`) rather than the full series.
+
+```{r}
+#| label: figS8-syne1
+
+target <- "SYNE1"
+
+import <- import_S
+dPCR   <- dPCR_S
+
+refs <-  c("Cal10", "Cal40", "Cal60", "Cal90")
+calib <- rpcr_calibrate(import[import$sample %in% refs, ])
+res <- rpcr_batchFit(import, calib = calib)
+res <- rpcr_calibDetect(res)
+
+### correlation
+df2 <- dPCR[grepl("Cal", dPCR$Sample.NTC.Control) & grepl("excl", dPCR$"Target..Name.") & dPCR$"Sample.NTC.Control" != "NTC", c("Well", "Edited.fraction")]
+df2$row <- substring(df2$Well, 1, 1)
+df2$col <- as.numeric(substring(df2$Well, 2))
+
+df2$tprop <- rep(seq(0, 1, 0.1), 4)[1:43]
+df2$cprop <- 1 - as.numeric(gsub("%", "", df2$"Edited.fraction")) / 100
+df2$delta <- df2$cprop - df2$tprop
+df2 <- na.omit(df2)
+
+df1 <- res
+df1 <- df1[grep("Cal", df1$sample), ]
+df1$delta <- df1$cprop - df1$tprop
+
+df1$method <- "rPCR"
+df2$method = "dPCR"
+colnames(df2)[colnames(df2) == "Well"] <- "well"
+
+df1_mean <- df1 %>% group_by(tprop) %>% summarize(mean_cprop1 = mean(cprop, na.rm = TRUE))
+df2_mean <- df2 %>% group_by(tprop) %>% summarize(mean_cprop2 = mean(cprop, na.rm = TRUE))
+
+merged_means <- inner_join(df1_mean, df2_mean, by = "tprop")
+
+cor_all <- rbind(cor_all, data.frame(target = "SYNE1", type = "RvsD", R = cor(merged_means$mean_cprop1, merged_means$mean_cprop2)))
+cor_all <- rbind(cor_all, data.frame(target = "SYNE1", type = "RvsT", R = cor(df1$tprop, df1$cprop)))
+cor_all <- rbind(cor_all, data.frame(target = "SYNE1", type = "DvsT", R = cor(df2$tprop, df2$cprop)))
+
+stats1 <- df1 %>% group_by(tprop) %>%
+  summarize(m1 = mean(cprop), sd1 = sd(cprop) / sqrt(n())) %>%
+  mutate(tprop = round(tprop, 2))
+stats2 <- df2 %>% group_by(tprop) %>%
+  summarize(m2 = mean(cprop), sd2 = sd(cprop) / sqrt(n())) %>%
+  mutate(tprop = round(tprop, 2))
+
+plot_data <- inner_join(stats1, stats2, by = "tprop")
+plot_data_S <- plot_data
+
+plot3_S <- ggplot(plot_data, aes(x = m1, y = m2)) +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  # Fehlerbalken für beide Achsen
+  geom_errorbar(aes(ymin = m2 - sd2, ymax = m2 + sd2), width = 0.02, color = "gray") +
+  geom_errorbar(aes(xmin = m1 - sd1, xmax = m1 + sd1), height = 0.02, color = "gray") +
+  # Mittelpunkte
+  geom_point(color = "black", size = 0.5, alpha = 0.2) +
+  # Regressionslinie
+  geom_smooth(method = "lm", color = "grey50", se = TRUE) +
+  # Korrelationskoeffizient und p-Wert automatisch einblenden
+  stat_cor(method = "pearson", label.x = 0.1, label.y = 0.9) +
+  labs(x = "proportion (rPCR)", y = "proportion (dPCR)") +
+  theme_rpcr()
+```
+
+```{r}
+#| label: figS8-syne1-plot
+#| fig-width: 2.4
+#| fig-height: 2.4
+
+plot3_S
+```
+
+------------------------------------------------------------------------
+
+# Correlation coefficients
+
+`stat_cor()` annotates each panel with the Pearson statistics it computes from
+the same `plot_data`. The values are recomputed here explicitly with
+`cor.test()` so that the numbers quoted in the manuscript can be checked rather
+than restated, and any disagreement reported.
+
+```{r}
+#| label: figS8-correlations
+
+pearson_row <- function(target, d) {
+  ct <- cor.test(d$m1, d$m2, method = "pearson")
+  data.frame(target = target,
+             n = nrow(d),
+             R = unname(ct$estimate),
+             p_value = ct$p.value)
+}
+
+cor_tbl <- rbind(
+  pearson_row("KIF13A", plot_data_K),
+  pearson_row("NUMA1",  plot_data_N),
+  pearson_row("SYNE1",  plot_data_S)
+)
+
+# Values as reported in the Results text and legend of ISCIENCE-D-26-02393_R2.
+cor_manuscript <- data.frame(
+  target        = c("KIF13A", "NUMA1", "SYNE1"),
+  R_manuscript  = c(1, 0.97, 1),
+  p_manuscript  = c(2.4e-13, 4.2e-7, 2.5e-14)
+)
+
+cor_check <- merge(cor_tbl, cor_manuscript, by = "target")
+cor_check$R_agrees <- abs(round(cor_check$R, 2) - cor_check$R_manuscript) < 0.005
+cor_check$p_ratio  <- cor_check$p_value / cor_check$p_manuscript
+
+knitr::kable(cor_check, digits = c(0, 0, 4, 12, 2, 12, 0, 3), row.names = FALSE,
+             caption = "Recomputed Pearson correlation against the values quoted in the manuscript")
+
+if (all(cor_check$R_agrees)) {
+  cat("All three recomputed correlation coefficients reproduce the manuscript values to two decimals.\n")
+} else {
+  cat("DISAGREEMENT with the manuscript for:\n")
+  print(cor_check[!cor_check$R_agrees, c("target", "R", "R_manuscript", "p_value", "p_manuscript")])
+}
+
+# The correlation collector assembled by the source script, for reference:
+#   RvsD = rPCR vs dPCR (this figure), RvsT / DvsT = each method vs theoretical
+cor_all
+```
+
+------------------------------------------------------------------------
+
+# Assembled figure
+
+```{r}
+#| label: figS8-assembled
+#| fig-width: 2.4
+#| fig-height: 7
+
+panelSup <- (plot3_K ) +
+  (plot3_N ) +
+  (plot3_S ) +
+  plot_layout(
+    nrow = 3,           # one panel per assay, stacked
+    heights = c(1, 1, 1)
+  )
+
+panelSup
+```
+
+------------------------------------------------------------------------
+
+# Save figure
+
+The output file name written by the source script
+(`Figure Supp (dPCR_compare).pdf`) is replaced by `ratioPCR_figure_S8.pdf`,
+so that this document writes
+the existing file in `documents/figures` rather than accumulating beside it.
+
+```{r}
+#| label: save-figures
+
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+
+psave("ratioPCR_figure_S8", panelSup, width = 5, height = 15, dpi = 600)
+
+cat("Figure S8 output written to:", fpath, "\n")
+```
+
+------------------------------------------------------------------------
+
+# Provenance and repairs
+
+| Element | Source | Repairs applied |
+|----|----|----|
+| KIF13A, NUMA1, SYNE1 panels | `plot3_K` / `plot3_N` / `plot3_S` | Data imports hoisted to the setup chunk; the dead first KIF13A calibration block (`import0`, `laKIF13A`) removed; the `plot1_*` / `plot2_*` panels and the RSE summary belong to main Figure 5C and are built in `ratioPCR_Figure_5.qmd`. Plotting code unchanged, German inline comments included. |
+| Assembled figure | `panelSup` → `ratioPCR_figure_S8.pdf` | Write routed through `psave()` in the save section. |
+
+Known upstream quirk kept unchanged: the horizontal error bars use
+`geom_errorbar(aes(xmin = , xmax = ), height = )`. `height` is not a
+`geom_errorbar` parameter and is ignored with a warning (suppressed by the
+document's execute options); the bars themselves render.
+
+------------------------------------------------------------------------
+
+# Manuscript figure
+
+The files this document writes into `documents/figures`, re-printed here at
+the size they are written at, so that the rendered document shows the panels
+as they appear in the manuscript rather than only the analysis-sized views
+above. The final chunk checks that every file is on disk.
+
+**`ratioPCR_figure_S8.pdf`** — the whole figure, 5 × 15 cm.
+
+```{r}
+#| label: manuscript-figure-S8
+#| echo: false
+#| fig-width: 1.97
+#| fig-height: 5.91
+
+panelSup
+```
+
+```{r}
+#| label: manuscript-figure-files
+#| echo: false
+
+written <- c("ratioPCR_figure_S8.pdf")
+data.frame(file = written,
+           exists = file.exists(file.path(fpath, written)),
+           row.names = NULL)
+```
+
+# Reproducibility
+
+```{r}
+#| label: session-info
+#| echo: true
+
+if (requireNamespace("sessioninfo", quietly = TRUE)) {
+  sessioninfo::session_info()
+} else {
+  print(sessionInfo())
+}
+
+if (requireNamespace("renv", quietly = TRUE)) {
+  try(print(renv::status()), silent = TRUE)
+}
+```

@@ -1,0 +1,358 @@
+---
+title: "ratioPCR Figure 3 — Calibration of rPCR using the analytical bias correction model"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+The supplied legend file contains the figure title and the corresponding results text, but no per-panel legend paragraph for the main figures. Both are quoted verbatim below.
+
+> Figure 3: Calibration of rPCR using the analytical bias correction model.
+
+> Based on the kinetic analysis, we derived a compact analytical model that maps the true inclusion proportion (ψ) to the apparent proportion (ψₐ) using a four interpretable parameters: α (relative probe intensity and amplification efficiency), rᵢ and rₑ (probe cross-reactivity terms), and γ (a ratio-dependent amplification term capturing rehybridization-driven drift).
+>
+> Sensitivity analysis confirmed that each parameter introduces a distinct, nonlinear pattern of ratio distortion. Variation in α produces a monotonic overestimation or underestimation of proportions greatest at intermediate values. Variation in rᵢ inflates apparent inclusion proportions at low true proportions, reflecting spurious inclusion probe signal on exclusion templates. Variation in rₑ compresses the apparent proportion range toward the midpoint, consistent with the behaviour observed for NUMA1 in Figure 1. Variation in γ produces an S-shaped distortion profile qualitatively identical to the equimolar drift predicted by the kinetic model (Figure 2G), linking the analytical calibration parameter directly to the heteroduplex formation mechanism. Modest deviations in any single parameter produced substantial nonlinear distortions, underscoring the importance of empirical parameter estimation for each assay (Figure 3A).
+>
+> Model parameters were fitted to endpoint fluorescence values from reference samples spanning 0–100 % inclusion using nonlinear least squares regression. The fitted parameter values reflected the known assay-specific characteristics: NUMA1 showed the largest rₑ value among the three assays, consistent with its pronounced exclusion probe cross-reactivity demonstrated in Supplementary Figure S3B. After calibration, corrected proportions (ψc) closely matched theoretical ratios across the full proportion range, substantially reducing residual error for all three assays (Figure 3B).
+
+The model in the form used throughout the study (Eq. 2) is
+
+$$
+\psi_a = \frac{\psi\,\alpha\gamma^{(1-2\psi)} - \psi r_i + r_i}
+              {\psi\,\alpha\gamma^{(1-2\psi)}(1 + r_e) - \psi r_i - \psi + r_i + 1}
+$$
+
+and is evaluated by `rpcr_simprop()` in the `ratioPCR` package.
+
+| Panel | Content |
+|----|----|
+| A | Sensitivity of ψₐ to α, rᵢ, rₑ and γ |
+| B | Calibrated vs theoretical proportions, three assays |
+
+# Setup
+
+Panel A is purely analytical and needs no data. Panel B is fitted to the endpoint fluorescence of the reference series in `20191120AS calibration.xlsx`; the import is identical to the one used for Figure 1.
+
+```{r}
+#| label: setup
+#| echo: true
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+library("latex2exp")
+library("viridis")
+
+# Render-time recompute switch (a plain variable, not Quarto's reserved `params`).
+recalculate <- as.logical(Sys.getenv("RPCR_RECALCULATE", "TRUE"))
+
+calibrationFile <- file.path(pp, "documents", "extdata", "20191120AS calibration.xlsx")
+
+# importing data
+import <- rpcr_wrap(rpcr_readTF(calibrationFile))
+import <- import[!import$sample == "neg. ctrl", ]
+import <- rpcr_calibDetect(import, qual = "")
+```
+
+# Panel A — sensitivity of the apparent proportion to the four model parameters
+
+Panel A shows, for each of the four calibration parameters in turn, how the apparent proportion ψₐ predicted by Eq. 2 departs from the theoretical proportion ψ when that one parameter is varied and the other three are held at their neutral values (α = 1, rᵢ = 0, rₑ = 0, γ = 1). Each block has an upper panel of ψₐ against ψ, with the neutral identity relation as a dotted line, and a lower panel of the deviation Δψ = ψₐ − ψ, which makes the shape of the distortion legible where the upper panel is visually saturated. The four blocks therefore separate the distinct signatures the parameters produce: a monotonic over- or under-estimation for α, an offset at low ψ for rᵢ, a compression toward the midpoint for rₑ, and the S-shaped equimolar drift for γ.
+
+`plot_sim()` builds one block: `geom_function()` layers over the parameter sweep, coloured on a viridis scale (log-transformed for α, whose sweep is multiplicative), assembled with `patchwork` at a 2 : 1 height ratio and a collected legend.
+
+```{r}
+#| label: panel-A-plot-sim
+#| echo: true
+
+plot_sim <- function(sim_fun="rpcr_simprop", para, range, log=FALSE, title=NULL, ratio=2, args = list(a=1, ri=0, re=0, g=1)) {
+  symb <- c(a="$\\alpha$", ri="$r_i$", re="$r_e$", g="$\\gamma$")
+  lw <- 0.2
+
+  delta_fun <- function(x, ...) { get(sim_fun)(x, ...) - x }
+
+  p1 <- ggplot() + xlim(0, 1) + ylim(0, 1) +
+    geom_function(fun = get(sim_fun), args = args, linetype = "dotted", linewidth = lw) +
+    theme_rpcr() +
+    labs(title = title, x = "theoretical proportion", y = "apparent proportion", color = TeX(symb[para])) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+  p2 <- ggplot() + xlim(0, 1) + ylim(-0.5, 0.5) +
+    geom_function(fun = delta_fun, args = args, linetype = "dotted", linewidth = lw) +
+    theme_rpcr() +
+    labs(x = TeX("$\\psi$"), y = TeX("$\\Delta\\psi$"), color = TeX(symb[para])) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+  # Layer hinzufügen
+  for (val in range) {
+    current_args <- args
+    current_args[[para]] <- val
+
+    p1 <- p1 + geom_function(fun = get(sim_fun), args = current_args, alpha=0.7, linewidth=lw, aes(color = !!val))
+    p2 <- p2 + geom_function(fun = delta_fun, args = current_args, alpha=0.7, linewidth=lw, aes(color = !!val))
+  }
+
+  # Farbskala anpassen
+  if (log) {
+    sim_breaks <- round(c(min(range), median(range), max(range)), 2)
+    p1 <- p1 + scale_color_viridis(trans = "log", breaks = sim_breaks, labels = sim_breaks)
+    p2 <- p2 + scale_color_viridis(trans = "log", breaks = sim_breaks, labels = sim_breaks)
+  } else {
+    p1 <- p1 + scale_color_viridis()
+    p2 <- p2 + scale_color_viridis()
+  }
+
+  merge_plots <- list(p1 + theme(plot.margin = unit(c(1,1,1,1), 'lines')),
+                      p2 + theme(plot.title = element_blank(),
+                                 plot.margin = unit(c(1,1,1,1), 'lines'),
+                                 legend.position = "none"))
+
+  p0 <- wrap_elements(wrap_plots(merge_plots, ncol = 1, nrow = 2, heights = c(ratio, 1)) +
+                        plot_layout(guides = "collect") &
+                        theme(legend.position = "bottom"))
+
+  return(list(p0,p1, p2))
+}
+```
+
+The α sweep is multiplicative and symmetric about 1 (`c(seq(1,4,0.2), 1/seq(1,4,0.2))`), the two cross-reactivity terms are swept over their physically meaningful interval \[0, 1\], and γ over \[1, 10\].
+
+```{r}
+#| label: panel-A-sweeps
+#| echo: true
+
+range <- function(mid=1,max=4,steps=.2) c(seq(mid,max,steps),1/seq(mid,max,steps))
+plot_a <- plot_sim(sim_fun="rpcr_simprop",para="a",log=TRUE,range=range(),title= TeX("$Modelling~parameter~alpha$"))
+plot_re <- plot_sim(sim_fun="rpcr_simprop",para="re",range=seq(0,1,0.05),title= TeX("$Modelling~parameter~r_e$"))
+plot_ri <- plot_sim(sim_fun="rpcr_simprop",para="ri",range=seq(0,1,0.05),title= TeX("$Modelling~parameter~r_i$"))
+plot_g <- plot_sim(sim_fun="rpcr_simprop",para="g",range=seq(1,10,0.4),title= TeX("$Modelling~parameter~gamma$"))
+
+rm(range)
+```
+
+The four blocks are then stripped of redundant axis furniture — only the leftmost block keeps its y-axis, only the lower row keeps the x-axis — and placed side by side, the leftmost block slightly wider to accommodate its axis labels.
+
+```{r}
+#| label: panel-A
+#| echo: true
+#| fig-width: 9
+#| fig-height: 4.5
+
+merge_theme <- theme(axis.text.y=element_blank(),
+                     axis.title.y=element_blank())
+
+merge_theme2 <- theme(axis.text.x=element_blank(),
+                      axis.title.x=element_blank())
+
+margin_1_a <- unit(c(0,0,0,0), 'lines')
+margin_1_b <- unit(c(0,0,0,0), 'lines')
+margin_2_a <- unit(c(0,0,0,0), 'lines')
+margin_2_b <- unit(c(0,0,0,0), 'lines')
+
+merge_a <- list(
+  plot_a[[2]] + theme(plot.margin = margin_1_a) + merge_theme2,
+  plot_a[[3]] + theme(plot.title = element_blank(),plot.margin =margin_2_a)
+)
+merge_ri <- list(
+  plot_ri[[2]] + theme(plot.margin = margin_1_b) + merge_theme + merge_theme2 ,
+  plot_ri[[3]] + theme(plot.title = element_blank(),plot.margin = margin_2_b) + merge_theme
+)
+
+merge_re <- list(
+  plot_re[[2]] + theme(plot.margin = margin_1_b) + merge_theme +merge_theme2,
+  plot_re[[3]] + theme(plot.title = element_blank(),plot.margin = margin_2_b) + merge_theme
+)
+
+merge_g <- list(
+  plot_g[[2]] + theme(plot.margin = margin_1_b) + merge_theme +merge_theme2,
+  plot_g[[3]] + theme(plot.title = element_blank(),plot.margin = margin_2_b) + merge_theme
+)
+ratio <- 2
+merge_a_f <- wrap_elements(wrap_plots(merge_a, ncol = 1, nrow = 2, heights = c(ratio, 1)) +
+                plot_layout(guides = "collect") &
+                theme(legend.position = "bottom",
+                      plot.margin = margin_1_b))
+merge_ri_f <- wrap_elements(wrap_plots(merge_ri, ncol = 1, nrow = 2, heights = c(ratio, 1)) +
+                             plot_layout(guides = "collect") &
+                             theme(legend.position = "bottom",plot.margin = margin_1_b))
+merge_re_f <- wrap_elements(wrap_plots(merge_re, ncol = 1, nrow = 2, heights = c(ratio, 1)) +
+                             plot_layout(guides = "collect") &
+                             theme(legend.position = "bottom",plot.margin = margin_1_b))
+
+merge_g_f <- wrap_elements(wrap_plots(merge_g, ncol = 1, nrow = 2, heights = c(ratio, 1)) +
+                             plot_layout(guides = "collect") &
+                             theme(legend.position = "bottom",plot.margin = margin_1_b))
+
+
+plot_final <- merge_a_f + merge_ri_f + merge_re_f + merge_g_f +
+  plot_layout(ncol = 4, widths = c(1.29, 1, 1, 1))
+
+plot_final
+```
+
+# Panel B — calibrated proportions against theoretical proportions
+
+Panel B is the calibration result for the three assays. The two rows are the apparent proportion ψₐ and the calibrated proportion ψ_c against the theoretical proportion ψ of the reference series, over the full 0–100 % range; the blocks of horizontal bars between them are the four fitted parameters per assay. Uncalibrated ψₐ departs from the diagonal in the assay-specific, ratio-dependent way documented in Figure 1; after applying Eq. 2 with the fitted parameters the points collapse onto the diagonal for all three assays.
+
+`rpcr_plotCalib()` returns a list whose `[[1]]` element is the proportion against theoretical plot and `[[2]]` the residual plot; `var = "cprop"` selects the calibrated proportion instead of the apparent one. Model `"single"` and `rtype = 45` fit the endpoint (cycle 45) fluorescence, which is what the results text describes.
+
+```{r}
+#| label: panel-B-fits
+#| echo: true
+
+settings <- list(qual="",
+                 model = "single",
+                 rtype = 45,
+                 confidence = FALSE,
+                 error = TRUE,
+                 smooth = TRUE,
+                 limit = c(-1,1),
+                 ratio = 1,
+                 colplot = TRUE,
+                 color_target = rpcr_col_target,
+                 color_sample = rpcr_col_sample)
+
+p1 <- do.call(rpcr_plotCalib,c(list(import,calibrate = TRUE),settings))
+p2 <- do.call(rpcr_plotCalib,c(list(import, var="cprop"),settings))
+```
+
+## Fitted calibration parameters
+
+The results text asserts that NUMA1 carries the largest rₑ of the three assays. Rather than restate that value, the document fits the parameters and prints them, for the Rn and the ΔRn signal, so the claim is checkable against the render.
+
+```{r}
+#| label: panel-B-parameters
+#| echo: true
+
+c1 <- do.call(rpcr_calibrate,c(list(import,signal="Rn"),settings))
+c2 <- do.call(rpcr_calibrate,c(list(import,signal="deltaRn"),settings))
+
+c1$target <- rownames(c1)
+c2$target <- rownames(c2)
+
+# Wide-format snapshots of the fitted parameters, kept before the long-format
+# reshape below so the fitted values can be tabulated as fitted.
+calib_wide <- rbind(
+  cbind(signal = "Rn",      c1[, c("target", "a", "ri", "re", "g")]),
+  cbind(signal = "deltaRn", c2[, c("target", "a", "ri", "re", "g")])
+)
+rownames(calib_wide) <- NULL
+
+knitr::kable(calib_wide, digits = 4,
+             caption = "Calibration parameters fitted to the endpoint fluorescence of the reference series, by assay and signal representation. a = alpha, ri and re = probe cross-reactivity, g = gamma.")
+```
+
+```{r}
+#| label: panel-B-largest-re
+#| echo: true
+
+# Which assay carries the largest exclusion-probe cross-reactivity per signal?
+do.call(rbind, lapply(split(calib_wide, calib_wide$signal), function(d)
+  d[which.max(d$re), c("signal", "target", "re")]))
+```
+
+```{r}
+#| label: panel-B-parameter-bars
+#| echo: true
+
+c1 <- c1 %>%
+  pivot_longer(
+    cols = c("a", "re", "ri", "g"),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+
+c2 <- c2 %>%
+  pivot_longer(
+    cols = c("a", "re", "ri", "g"),
+    names_to = "variable",
+    values_to = "value"
+  )
+
+
+c1 <- c1[order(c1$target),]
+c2 <- c2[order(c2$target),]
+
+p1a <- ggplot() + geom_col(data=c1[c1$variable=="a",], aes(target,value,fill=target),col=1) +
+  theme_rpcr() +
+  scale_fill_manual(values=rpcr_col_target[1:3] ) +
+  coord_flip() +  theme(axis.text.y = element_blank(),axis.title.x = element_blank(),axis.text = element_text(angle = 45, vjust = 1, hjust = 1)) +ylim(-0.03,6)+ theme(legend.position = "none")
+p1ri <- ggplot() + geom_col(data=c1[c1$variable=="ri",], aes(target,value,fill=target),col=1) +
+  theme_rpcr() +
+  scale_fill_manual(values=rpcr_col_target[1:3] ) +
+  coord_flip()+  theme(axis.text.y = element_blank(),axis.title.x = element_blank(),axis.text = element_text(angle = 45, vjust = 1, hjust = 1)) +ylim(-0.03,1)+ theme(legend.position = "none")
+p1re <- ggplot() + geom_col(data=c1[c1$variable=="re",], aes(target,value,fill=target),col=1) +
+  theme_rpcr() + theme(axis.title.x= element_blank(),axis.text = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  scale_fill_manual(values=rpcr_col_target[1:3] ) +
+  coord_flip()+  theme(axis.text.y = element_blank())+ ylim(-0.03,1)+ theme(legend.position = "none")
+p1g <- ggplot() + geom_col(data=c1[c1$variable=="g",], aes(target,value,fill=target),col=1) +
+  theme_rpcr() +
+  scale_fill_manual(values=rpcr_col_target[1:3] ) +
+  coord_flip()+  theme(axis.text.y = element_blank(),axis.text = element_text(angle = 45, vjust = 1, hjust = 1))+ylim(-0.03,2)+ theme(legend.position = "none")
+```
+
+The three column groups — uncalibrated proportions, fitted parameters, calibrated proportions — are composed with `patchwork` and separated by spacers.
+
+```{r}
+#| label: panel-B
+#| echo: true
+#| fig-width: 9
+#| fig-height: 5
+
+s1 <- ((p1[[1]]+theme(legend.position="none", axis.title.x = element_blank(),axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))) / (p1[[2]]+theme(legend.position="none",axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))) + coord_cartesian(ylim = c(-0.6,0.6))) + plot_layout(heights =  c(1,1))
+s2 <- (p1a / p1ri / p1re / p1g)
+s3 <- ((p2[[1]]+theme(legend.position="none", axis.title.x = element_blank(),axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))) / (p2[[2]]+theme(legend.position="none",axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)))+ coord_cartesian(ylim = c(-0.6,0.6))) + plot_layout(heights =  c(1,1))
+total1 <- (s1 | plot_spacer() | s2 | plot_spacer() | s3)  + plot_layout(widths = c(1,0.2,1,0.2,1))
+
+total1
+```
+
+# Save figure
+
+The two panels are written separately at the journal's single-column width (11.4 cm) and assembled into the final figure at layout stage.
+
+```{r}
+#| label: save-figure
+#| echo: true
+
+psave(filename = "ratioPCR_figure_3A",
+      plot = plot_final,
+      path = fpath,
+      device = "pdf",
+      width = 11.4,
+      height = 5.5,
+      units = "cm",
+      dpi = 300)
+
+psave(filename = "ratioPCR_figure_3B",
+      plot = total1,
+      path = fpath,
+      device = "pdf",
+      width = 11.4,
+      height = 6,
+      units = "cm",
+      dpi = 1000)
+
+list.files(fpath, pattern = "^ratioPCR_figure_3", full.names = FALSE)
+```

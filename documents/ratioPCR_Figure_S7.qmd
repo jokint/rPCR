@@ -1,0 +1,1157 @@
+---
+title: "ratioPCR Figure S7 — Ratio calculation using single cycles or multi-cycle slope fitting"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+<<<BLOCK
+<!-- ============================================================= -->
+<!-- ratioPCR_Figure_S7.qmd                                         -->
+<!-- Self-contained rebuild of Supplementary Figure S7.             -->
+<!-- Chunk bodies transplanted; repairs listed at the end.          -->
+<!-- ============================================================= -->
+BLOCK>>>
+
+# Figure legend
+
+The supplementary legends are complete in the supplied legend file and are
+quoted verbatim.
+
+> Supplementary Figure S7: Ratio calculation using single cycles or
+> multi-cycle slope fitting
+>
+> (A) Single-cycle ratio estimation using ΔRn and derRn signals. Uncalibrated
+> and calibrated apparent inclusion proportions are shown for each cycle from
+> C₋₁₀ to C₊₁₅ relative to Cᵢ for KIF13A, NUMA1, and SYNE1 using
+> baseline-subtracted fluorescence (ΔRn, left four columns) and first-derivative
+> signals (derRn, right four columns). Horizontal dashed lines indicate
+> theoretical input proportions. Equivalent results for raw Rn signals are shown
+> in Figure 4B.
+>
+> (B) Residuals between calibrated proportions and theoretical values as a
+> function of relative cycle position, shown separately for Rn, ΔRn, and derRn
+> signals for all three assays. Upper rows show the full deviation range; lower
+> rows show violin plots of the deviation distribution across the cycle range
+> C₋₅ to C₊₁₀, illustrating the dependence of accuracy and precision on both
+> cycle selection and signal type. RSE comparison across signal types is shown
+> in Figure 4C.
+>
+> (C) RSE heatmaps for the cycle-range slope fitting method. Each heatmap shows
+> RSE values as a function of start and end cycle position relative to Cᵢ for
+> KIF13A, NUMA1, SYNE1, and the mean across assays. Yellow regions indicate low
+> RSE (optimal accuracy); purple regions indicate calibration failure. For each
+> assay, an optimal window of cycle positions can be identified in which
+> multi-cycle slope fitting achieves minimum RSE. The experimental design of the
+> cycle-range method is illustrated in Figure 4D.
+>
+> (D) RSE heatmaps for the derivative-threshold slope fitting method. Each
+> heatmap shows RSE values as a function of threshold 1 (x-axis, applied before
+> Cᵢ) and threshold 2 (y-axis, applied after Cᵢ) for KIF13A, NUMA1, SYNE1, and
+> the mean across assays. Warm colours indicate optimal threshold combinations;
+> purple regions indicate calibration failure. The experimental design of the
+> threshold method is illustrated in Figure 4E. Performance comparison of
+> single-cycle and multi-cycle approaches is shown in Figure 4F.
+
+| Panel | Content |
+|-------|---------|
+| A | Single-cycle ψₐ and ψ_c per cycle, ΔRn and derRn |
+| B | Residuals by cycle position, violins over the central window |
+| C | RSE heatmaps, cycle-range method |
+| D | RSE heatmaps, derivative-threshold method |
+
+# Setup
+
+Panels A and B rest on the single-cycle sweep across relative cycle positions;
+panels C and D on the two multi-cycle parameter sweeps. All three are expensive,
+so all three respect the recompute switch:
+
+```
+RPCR_RECALCULATE=FALSE quarto render ratioPCR_Figure_S7.qmd   # read caches
+RPCR_RECALCULATE=TRUE  quarto render ratioPCR_Figure_S7.qmd   # recompute (default)
+```
+
+```{r}
+#| label: setup
+#| echo: true
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+library(ggh4x)
+library(viridis)
+
+# Render-time recompute switch (a plain variable, not Quarto's reserved `params`).
+recalculate <- as.logical(Sys.getenv("RPCR_RECALCULATE", "TRUE"))
+
+calibrationFile <- file.path(pp, "documents", "extdata", "20191120AS calibration.xlsx")
+resultsCache    <- file.path(pp, "documents", "extdata", "results 2026-04-28 .rds")
+
+# importing data
+import <- rpcr_wrap(rpcr_readTF(calibrationFile))
+import <- import[!import$sample == "neg. ctrl", ]
+import <- rpcr_calibDetect(import, qual = "")
+
+# `res` holds the sweep results keyed by analysis name. Without recompute it
+# comes from the cache.
+if (!recalculate && file.exists(resultsCache)) {
+  res <- readRDS(resultsCache)
+}
+
+c(cache_present = file.exists(resultsCache),
+  cached_analyses = paste(names(res), collapse = "; "))
+```
+
+# Single-cycle sweep across relative cycle positions
+
+The same sweep that underlies Figure 4B and 4C: the full calibration is run
+independently at each relative cycle from C₋₁₀ to C₊₁₅, for Rn and ΔRn and for
+their untransformed (`0D`) and first-derivative (`1D`) forms, by collapsing the
+fitting window onto a single cycle (`rtype = "ip"`, `roff = c(cycle, cycle)`).
+Where Figure 4 shows the Rn results, panels A and B of this figure show the
+ΔRn and derRn results and the residual structure of all three signal types.
+
+The cache is shared with `ratioPCR_Figure_4.qmd`, so the sweep is computed once
+per recompute cycle regardless of which of the two documents renders first.
+
+```{r}
+#| label: single-cycle-sweep
+#| echo: true
+
+targets <- unique(import$target)
+datatypes <- c("Rn","deltaRn")
+derivatives <- c("0D","1D")
+crange <- c(-10:15)
+
+singleCycleCache <- file.path(pp, "documents", "extdata", "single cycle results.rds")
+
+if (!recalculate && file.exists(singleCycleCache)) {
+
+  singlecycle  <- readRDS(singleCycleCache)
+  results_data <- singlecycle$results_data
+  results_qc   <- singlecycle$results_qc
+
+} else {
+
+  details <- setNames(lapply(datatypes, function(datatype)
+    setNames(lapply(derivatives, function(derivative)
+      setNames(lapply(crange,function(cycle)
+        rpcr_calibrate(import,
+                       qual = "",
+                       output = "details",
+                       signal = datatype,
+                       derivative = if(derivative=="1D") TRUE else FALSE,
+                       rtype = "ip", # method to define range
+                       roff = c(cycle,cycle), # offset from range defined by rtype
+                       model = "single" # fitting method: either linear or 2nd degree polynomial (poly)
+        )
+      ), paste("c ",crange))
+    ), derivatives)
+  ), datatypes)
+
+
+  results_data <-   do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+    do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+      do.call(rbind.data.frame, lapply(crange,function(cycle)
+        cbind(datatype = datatype,
+              derivative = derivative,
+              cycle = cycle,
+              details[[datatype]][[derivative]][[paste("c ",cycle)]]$summary
+        )
+      ))
+    ))
+  ))
+
+
+  results_qc <- do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+    do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+      do.call(rbind.data.frame, lapply(crange,function(cycle)
+        cbind(datatype = datatype,
+              cycle = cycle,
+              derivative = derivative,
+              details[[datatype]][[derivative]][[paste("c ",cycle)]]$calib$summary$qc,
+              details[[datatype]][[derivative]][[paste("c ",cycle)]]$calib$summary$calib[,-1]
+        )
+      ))
+    ))
+  ))
+
+  try(saveRDS(list(results_data = results_data, results_qc = results_qc),
+              singleCycleCache), silent = TRUE)
+}
+
+c(rows_results_data = nrow(results_data), rows_results_qc = nrow(results_qc))
+```
+
+# Panel A — single-cycle estimates from the ΔRn and derRn signals
+
+Panel A is the ΔRn and derRn counterpart of Figure 4B. For each relative cycle
+position, the apparent proportion ψₐ and the calibrated proportion ψ_c are
+plotted against cycle for all three assays, with the theoretical proportions of
+the reference series as horizontal dashed lines. The baseline-subtracted signal
+behaves like the raw signal — accuracy improves into the later exponential
+cycles — whereas the derivative signal is informative only in a narrow band
+around Cᵢ, where the per-cycle fluorescence increase is large enough to carry
+the ratio. Each signal is shown twice: the full proportion range, and a zoom on
+Δψ = ±0.05 over C₋₅ to C₊₁₀, which is where the differences between the signal
+types are actually visible.
+
+The panel is the same plot as Figure 4B — apparent (`aprop`) and calibrated
+(`cprop`) proportion per relative cycle, jittered per well and coloured by
+theoretical proportion, with the reference proportions as dashed horizontal
+lines — evaluated for the other two signals: ΔRn (`deltaRn`, `0D`) and derRn
+(`Rn`, `1D`), each as an uncalibrated/calibrated pair. The construction is
+taken from the `panel-B` chunk of `ratioPCR_Figure_4.qmd`, not from
+`rpcr_plotCalibCycle()`, which the chunk called until 2026-09-14: that function
+now draws `delta` (ψ_c − ψ) as a boxplot-plus-jitter deviation view, so it
+produced panel-B content under panel A's name. See *Provenance and repairs*.
+
+```{r}
+#| label: panel-A
+#| echo: true
+#| fig-width: 8
+#| fig-height: 6
+
+yzoom <- c(-0.05,0.05)
+xzoom <- c(-5,10)
+
+qc <- "RSEcprop"
+results <- results_data
+
+dfA <- results |>
+  tidyr::pivot_longer(cols = c("aprop", "cprop"),
+                      names_to = "variable", values_to = "value")
+
+# deltaRn has no first-derivative form; Rn/0D is Figure 4B, not this panel.
+dfA <- dfA[!(dfA$datatype == "deltaRn" & dfA$derivative == "1D"), ]
+dfA <- dfA[!(dfA$datatype == "Rn" & dfA$derivative == "0D"), ]
+
+dfA$signal <- factor(ifelse(dfA$derivative == "1D", "derRn", "deltaRn"),
+                     levels = c("deltaRn", "derRn"))
+dfA$variable <- factor(dfA$variable, levels = c("aprop", "cprop"),
+                       labels = c("uncalibrated", "calibrated"))
+
+figure_S7_A <- ggplot(data = dfA) +
+  geom_hline(yintercept = unique(dfA$tprop), colour = "grey80", linetype = "dashed") +
+  geom_jitter(aes(x = cycle, y = value, color = tprop), shape = 20, alpha = 0.7,
+              size = 0.2, width = 0.2, height = 0) +
+  theme_rpcr() +
+  scale_colour_gradientn(colours = rpcr_col_probe) +
+  scale_y_continuous(breaks = unique(dfA$tprop)) +
+  coord_cartesian(ylim = c(-0.1, 1.1)) +
+  facet_grid(target ~ signal + variable) +
+  labs(x = expression("cycle relative to C"[i]~"(C"[r]*")"),
+       y = expression("proportion ("*psi*")")) +
+  theme(axis.text.y = element_text(size = 5),
+        legend.position = "bottom")
+
+figure_S7_A
+```
+
+The deviation view of the same two signals — the boxplot-plus-jitter rendering
+that `rpcr_plotCalibCycle()` returns, full range and zoomed on Δψ = ±0.05 over
+C₋₅ to C₊₁₀ — is kept as a diagnostic. It is not panel A and is not written to
+`documents/figures`.
+
+```{r}
+#| label: panel-A-deviation-diagnostic
+#| echo: true
+#| fig-width: 8
+#| fig-height: 8
+
+p2a <- rpcr_plotCalibCycle(results[results$derivative=="0D"&results$datatype=="deltaRn",],title="deltaRn") + theme_rpcr() + theme(plot.margin = unit(c(0.1,0.2,0.1,0.2), 'lines'))
+p2b <- p2a + coord_cartesian(ylim=yzoom,xlim=xzoom)+ ggtitle("") + theme(plot.margin = unit(c(0.1,0.2,0.5,0.2), 'lines'))
+
+p3a <- rpcr_plotCalibCycle(results[results$derivative=="1D"&results$datatype=="Rn",],title="derRn") + theme_rpcr() + theme(plot.margin = unit(c(0.1,0.2,0.1,0.2), 'lines'))
+p3b <- p3a + coord_cartesian(ylim=yzoom,xlim=xzoom)+ ggtitle("") + theme(plot.margin = unit(c(0.1,0.2,0.5,0.2), 'lines'))
+
+ggpubr::ggarrange(p2a, p2b, p3a, p3b,
+                  ncol = 2, nrow = 2,
+                  legend = "bottom",
+                  common.legend = TRUE,
+                  align = "v")
+```
+
+# Panel B — residuals by cycle position and signal type
+
+Panel B is the residual view of the same sweep: the deviation of the calibrated
+proportion from the theoretical proportion, Δ = ψ_c − ψ, against relative cycle
+position, for the three signal types Rn, ΔRn and derRn and the three assays.
+The upper composition covers the full deviation range with a boxplot per cycle
+and the individual wells jittered over it, coloured by theoretical proportion —
+this is where the cycle positions at which calibration breaks down become
+visible. The lower composition is the violin view over the central window,
+which shows both the accuracy (offset of the distribution from zero) and the
+precision (its width) as a function of cycle selection. The jitter width is
+derived from the mean spacing of the cycle grid so that replicates separate
+without crossing into the neighbouring cycle.
+
+```{r}
+#| label: panel-B-setup
+#| echo: true
+
+df <- results_data
+
+# Cycle window of the violin composition. The submitted panel spans C-5 to
+# C+10 — its inset brackets start at -5 and +10 on the full-range axis above,
+# its lower block carries ticks at -5/0/5/10, and the legend says "C-5 to
+# C+10". The window is set here once and used by both the violin chunk and
+# the deviation table.
+bzoom <- c(-5, 10)
+
+
+df$signal <- interaction(df$datatype,df$derivative)
+df <- df[df$signal!="deltaRn.1D",]
+
+
+df$signal <- factor(df$signal, levels=c("Rn.0D","deltaRn.0D","Rn.1D"), labels=c("Rn","deltaRn","derRn"))
+  jwidth <- unique(df[,"cycle"])
+  jwidth <- jwidth[order(jwidth)]
+  jwidth <- mean(jwidth[2:(length(jwidth))]- jwidth[1:(length(jwidth)-1)])/5
+
+
+    plot <- ggplot(data=df) +
+        theme_rpcr() +  scale_colour_gradientn(colours = rpcr_col_probe)
+```
+
+```{r}
+#| label: panel-B-full-range
+#| echo: true
+#| fig-width: 8
+#| fig-height: 7
+
+  plot1 <- plot +
+    ggh4x::facet_grid2(target ~ signal, switch = "y", strip = ggh4x::strip_themed(background_y = ggh4x::elem_list_rect(fill = rpcr_col_target)),axes = "x") +
+    geom_boxplot(aes(x=cycle,y=delta,group=cycle),outlier.shape = NA) +
+    geom_jitter(aes(x=cycle,y=delta, group=interaction(cycle,tprop),col=tprop), # col= if (colplot) as.factor(tprop) else "black",
+                             width=jwidth,
+                             alpha=0.5,
+                             size=1)
+
+plot1
+```
+
+```{r}
+#| label: panel-B-violins
+#| echo: true
+#| fig-width: 8
+#| fig-height: 7
+
+  plot2 <- ggplot(data=df) +
+    theme_rpcr() +  scale_colour_gradientn(colours = rpcr_col_probe)  +
+    ggh4x::facet_grid2(target ~ signal,  axes = "all")+
+    geom_violin(aes(x=cycle,y=delta,group=cycle)) + #,fill="grey90") +
+    geom_jitter(aes(x=cycle,y=delta, group=interaction(cycle,tprop),col=tprop), # col= if (colplot) as.factor(tprop) else "black",
+                             width=jwidth,
+                             alpha=0.5,
+                             size=1)+
+    coord_cartesian(ylim=yzoom,xlim=c(bzoom[1]-0.1,bzoom[2]+0.1)) +
+    ggtitle("") + theme(plot.margin = unit(c(0.1,0.2,0.5,0.2), 'lines')) +
+    scale_x_continuous(breaks=seq(bzoom[1],bzoom[2],by=5))
+
+plot2
+```
+
+```{r}
+#| label: panel-B-deviation
+#| echo: true
+
+# Mean absolute deviation of the calibrated proportion from theoretical, over
+# the cycle window shown in the violin composition, per assay and signal type.
+knitr::kable(
+  df %>%
+    filter(cycle >= bzoom[1], cycle <= bzoom[2]) %>%
+    group_by(target, signal) %>%
+    summarise(n = n(),
+              mean_delta = mean(delta, na.rm = TRUE),
+              mean_abs_delta = mean(abs(delta), na.rm = TRUE),
+              sd_delta = sd(delta, na.rm = TRUE),
+              .groups = "drop"),
+  digits = 4,
+  caption = "Deviation of the calibrated proportion from the theoretical proportion over the cycle window C-5 to C+10 shown in the violin composition, by assay and signal type."
+)
+```
+
+```{r}
+#| label: panel-B-assembled
+#| echo: true
+#| fig-width: 8
+#| fig-height: 12
+
+figure_S7_B <- ggpubr::ggarrange(plot1, plot2, ncol = 1, nrow = 2,
+                                 legend = "bottom", common.legend = TRUE)
+
+figure_S7_B
+```
+
+# Panel C — RSE heatmaps for the cycle-range slope-fitting method
+
+Panel C is the optimisation surface of the cycle-range method whose design is
+Figure 4D. Every combination of window start and window end offset relative to
+Cᵢ, from −20 to +20 cycles, is used to fit the slope of the inclusion against
+the exclusion signal, the resulting ψₐ is calibrated, and the residual standard
+error of the calibrated proportion is recorded per assay. Reading the surface
+gives the assay-specific optimal window directly: low-RSE regions are the
+windows over which multi-cycle slope fitting is accurate, and the regions where
+no value is defined are combinations for which the calibration fit does not
+converge.
+
+## Sweep
+
+41 × 41 combinations, of which the 820 with end > start are meaningful windows.
+`rtype = "ip"` with `roff = c(start, end)`; `model = "linear"` because a
+multi-cycle window is fitted as a straight line through the two-channel signal.
+
+```{r}
+#| label: panel-C-sweep
+#| echo: true
+
+analysis <- "IP range"
+
+df <- import
+
+datalist <- "Rn"
+range1_list <- seq(-20,20,1)
+range2_list <- seq(-20,20,1)
+
+
+if (recalculate || is.null(res[[analysis]]$results_qc)) {
+
+res[[analysis]]$details <-  setNames(lapply(range1_list,function(range1){
+               setNames(lapply(range2_list,function(range2) {
+                 rpcr_calibrate(df,
+                               qual="",
+                               output = "details",
+                               rtype = "ip", # method to define range
+                               roff = c(range1,range2), # offset from range defined by rtype
+                               model = "linear" # fitting method: either linear or 2nd degree polynomial (poly)
+                   )
+                 }), paste0("R_",range2_list))}
+               ), paste0("R_",range1_list))
+
+
+
+res[[analysis]]$results_data <- do.call(rbind.data.frame, lapply(range1_list, function(range1)
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2)
+                        cbind(range1 = range1,
+                              range2 = range2,
+                              res[[analysis]]$details[[paste0("R_",range1)]][[paste0("R_",range2)]]$summary
+                              )
+                        ))
+                      ))
+
+
+res[[analysis]]$results_qc <-
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2)
+                        cbind(range1 = range1,
+                              range2 = range2,
+                               res[[analysis]]$details[[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                       )
+                        ))
+                      ))
+
+
+paraQC <- "RSEcprop"
+res[[analysis]]$results_qc2 <-
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2)  {
+                    settings <- standardSettings
+                    settings[,c("rtype","roff")] <- c("ip:ip",paste(c(range1,range2),collapse=":"))
+                    temp <-res[[analysis]]$details[[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                    rownames(temp) <- temp$target
+                    temp2 <- data.frame(t(temp))[paraQC,]
+                    cbind(settings,mean = mean(temp[,paraQC]),temp2)
+                    }
+               ))
+             ))
+
+
+
+res[[analysis]]$details <- NULL
+
+}
+
+nrow(res[[analysis]]$results_qc)
+```
+
+## Heatmaps
+
+The colour scale is a manual binning of RSE at the **deciles of the RSE
+distribution** — `c(0, quantile(value, seq(0, 1, 0.1)))`, eleven bins — computed
+over the four maps together and before the `end > start` filter, reversed plasma
+so that low RSE is warm; combinations without a defined RSE are drawn grey. Only
+windows with end > start are shown, the four maps sit side by side, and the axes
+are squared with `coord_fixed()` so that the surface is not distorted.
+
+Data-driven breaks are what the submitted panel used.
+The fixed `c(0, 0.01, 0.011, …, 0.019, max)` vector
+is a later working
+revision: on this sweep it puts almost every window in its first bin, so the
+interior gradient and with it the optimum disappear. See *Provenance and
+repairs*.
+
+```{r}
+#| label: panel-C
+#| echo: true
+#| fig-width: 8
+#| fig-height: 3
+
+analysis <- "IP range"
+
+df <- res[[analysis]]$results_qc
+
+
+var <- "RSEcprop"
+
+top_mean <- df |>
+  dplyr::group_by(range1, range2) |>
+  dplyr::summarise(mean = mean(.data[[var]]), .groups = "drop") |>
+  dplyr::mutate(mean = mean * 100)
+
+top <- df |>
+  dplyr::select(range1, range2, target, value = dplyr::all_of(var)) |>
+  tidyr::pivot_wider(
+    names_from = target,
+    values_from = value
+  ) |>
+  dplyr::left_join(
+    top_mean,
+    by = c("range1", "range2")
+  )
+
+print(top[which.min(top$mean),])
+
+# Four maps of the panel: the three assays and their mean, built by melting
+# results_qc2 over c("mean", the three assays) and facetting on the
+# resulting variable; the same long frame is built here from results_qc so
+# that the maps and the table share one aggregation. The mean is unscaled
+# (the x100 of `top_mean` above is for the printed table only).
+dfC <- df[, c("range1", "range2", "target", var)]
+
+dfC_mean <- dfC |>
+  dplyr::group_by(range1, range2) |>
+  dplyr::summarise(dplyr::across(dplyr::all_of(var), mean), .groups = "drop") |>
+  dplyr::mutate(target = "mean")
+
+dfC_all <- rbind(as.data.frame(dfC), as.data.frame(dfC_mean)[, names(dfC)])
+dfC_all$target <- factor(dfC_all$target, levels = c("KIF13A", "NUMA1", "SYNE1", "mean"))
+
+# Deciles of the pooled RSE over all four maps, taken before the end > start
+# filter is applied. `unique()` only guards against a tied quantile, which
+# would make cut() abort; on this sweep the eleven bins are distinct and the
+# vector used is unaffected.
+breaks_C <- unique(c(0, quantile(dfC_all[[var]], probs = seq(0, 1, by = 0.1),
+                                 na.rm = TRUE)))
+
+# The binning is materialised as a column rather than left inside aes(). An
+# `aes(fill = cut(get(var), breaks = scale_breaks))` mapping is a quosure: it is
+# evaluated when the plot is *drawn*, so the object printed by `psave()` in the
+# save-figure chunk picks up whatever `scale_breaks` holds by then — i.e. panel
+# D's vector, which is how both saved PDFs came to carry one legend. Failed
+# combinations get their own level so the legend reads as in the figure instead
+# of "NA".
+dfC_all$bin <- cut(dfC_all[[var]], breaks = breaks_C)
+levels_C <- levels(dfC_all$bin)
+dfC_all$bin <- factor(ifelse(is.na(dfC_all$bin), "calibration failed",
+                             as.character(dfC_all$bin)),
+                      levels = c(levels_C, "calibration failed"))
+col_C <- c(rev(viridis::plasma(n = length(breaks_C)))[seq_along(levels_C)], "grey90")
+
+dfC_all <- dfC_all[dfC_all$range2 > dfC_all$range1, ]
+
+df2 <- dfC_all[!is.na(dfC_all[[var]]), ]
+r1 <- c(min(df2$range1, df2$range2), max(df2$range1, df2$range2))
+
+figure_S7_C <- ggplot() +
+  geom_tile(dfC_all, mapping = aes(range1, range2, fill = bin), col = "white") +
+  scale_fill_manual(values = col_C, drop = FALSE) + theme_rpcr() +
+  facet_grid(. ~ target) + coord_fixed() +
+  scale_y_continuous(breaks = seq(r1[1], r1[2], by = 10), limits = r1) +
+  scale_x_continuous(breaks = seq(r1[1], r1[2], by = 10), limits = r1) +
+  labs(x = "relative starting cycle", y = "relative ending cycle") +
+  theme(legend.key.size = unit(0.2, "cm"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 8),
+        strip.background = element_blank(),
+        legend.position = "right",
+        legend.title = element_blank()) +
+  guides(fill = guide_legend(ncol = 1))
+
+figures[[analysis]] <- figure_S7_C
+
+figure_S7_C
+```
+
+```{r}
+#| label: panel-C-optima
+#| echo: true
+
+# Optimal window per assay, and the window minimising the mean across assays.
+qcC <- res[["IP range"]]$results_qc
+qcC <- qcC[!is.na(qcC[[var]]) & qcC$range2 > qcC$range1, ]
+
+knitr::kable(
+  rbind(
+    do.call(rbind, lapply(split(qcC, qcC$target), function(d)
+      data.frame(scope = unique(d$target), start = d$range1[which.min(d[[var]])],
+                 end = d$range2[which.min(d[[var]])], RSEcprop = min(d[[var]])))),
+    data.frame(scope = "mean across assays",
+               start = top$range1[which.min(top$mean)],
+               end = top$range2[which.min(top$mean)],
+               RSEcprop = min(top$mean, na.rm = TRUE) / 100)
+  ),
+  digits = 4, row.names = FALSE,
+  caption = "Cycle-range windows (offsets relative to Ci) minimising the residual standard error of the calibrated proportion, per assay and for the mean across assays."
+)
+```
+
+The legend describes four heatmaps in this panel — the three assays plus the
+mean across assays — and all four are now drawn. Here the same long frame is
+assembled from `results_qc`, so the map and the optimum in the table above
+come from one aggregation.
+
+# Panel D — RSE heatmaps for the derivative-threshold method
+
+Panel D is the optimisation surface of the threshold method whose design is
+Figure 4E. The two thresholds — one applied on the rising flank before Cᵢ, one
+on the falling flank after it — are swept independently from 0 to 0.99 in 0.05
+steps, so that each combination defines a window that adapts to the kinetics of
+each individual reaction rather than to a fixed cycle offset. As in panel C the
+score is the residual standard error of the calibrated proportion per assay.
+
+## Sweep
+
+```{r}
+#| label: panel-D-sweep
+#| echo: true
+
+analysis <- "tres double range"
+
+df <- import
+
+datalist <- "Rn"
+range1_list <- seq(0,0.99,0.05)
+range2_list <- seq(0,0.99,0.05)
+
+if (recalculate || is.null(res[[analysis]]$results_qc)) {
+
+res[[analysis]]$details <-   setNames(lapply(datalist, function(datatype)
+               setNames(lapply(range1_list,function(range1){
+
+               setNames(lapply(range2_list,function(range2) {
+                 rpcr_calibrate(df,
+                               qual="",
+                               output = "details",
+                               signal = datatype,
+                               tres = c(range1,range2),     # treshold value to define dynamic range
+                               rtype = "dynamic", # method to define range
+                               roff = 0, # offset from range defined by rtype
+                               model = "linear" # fitting method: either linear or 2nd degree polynomial (poly)
+                   )
+                 }), paste0("R_",range2_list))}
+               ), paste0("R_",range1_list))
+               ), datalist)
+
+
+res[[analysis]]$results_data <- do.call(rbind.data.frame, lapply(datalist, function(datatype)
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2)
+                        cbind(datatype = datatype,
+                              range1 = range1,
+                              range2 = range2,
+                              res[[analysis]]$details[[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$summary
+                              )
+                        ))
+                      ))
+                    ))
+
+res[[analysis]]$results_qc <-   do.call(rbind.data.frame, lapply(datalist, function(datatype)
+                    do.call(rbind.data.frame, lapply(range1_list, function(range1)
+                      do.call(rbind.data.frame, lapply(range2_list, function(range2)
+                        cbind(datatype = datatype,
+                              range1 = range1,
+                              range2 = range2,
+                               res[[analysis]]$details[[datatype]][[paste0("R_",range1)]][[paste0("R_",range2)]]$calib$summary$qc
+                       )
+                        ))
+                      ))
+                    ))
+
+res[[analysis]]$details <- NULL
+}
+
+nrow(res[[analysis]]$results_qc)
+```
+
+## Heatmaps
+
+Four maps — the three assays and their mean — in one plot on the same binned
+scale as panel C: RSE cut at its own deciles, reversed plasma, undefined
+combinations grey. Threshold 1 is on the x-axis and threshold 2 on the y-axis,
+both as percentages (the sweep stores them as fractions 0–0.95, and the panel
+multiplies by 100), and `coord_fixed()` squares the maps.
+
+```{r}
+#| label: panel-D
+#| echo: true
+#| fig-width: 8
+#| fig-height: 3
+
+analysis <- "tres double range"
+
+df <- res[[analysis]]$results_qc
+
+var <- "RSEcprop"
+
+top_mean <- df |>
+  dplyr::group_by(datatype, range1, range2) |>
+  dplyr::summarise(mean = mean(.data[[var]]), .groups = "drop") |>
+  dplyr::mutate(mean = mean * 100)
+
+top <- df |>
+  dplyr::select(datatype, range1, range2, target, value = dplyr::all_of(var)) |>
+  tidyr::pivot_wider(
+    names_from = target,
+    values_from = value
+  ) |>
+  dplyr::left_join(
+    top_mean,
+    by = c("datatype", "range1", "range2")
+  )
+
+
+print(top[which.min(top$mean),])
+
+
+# Four maps in one plot: the three assays and their mean, melted and
+# facetted into a single grid. The mean is the unscaled counterpart of
+# `top_mean` above, so the map and the optimum in the table below agree.
+dfD <- df[, c("range1", "range2", "target", var)]
+
+dfD_mean <- dfD |>
+  dplyr::group_by(range1, range2) |>
+  dplyr::summarise(dplyr::across(dplyr::all_of(var), mean), .groups = "drop") |>
+  dplyr::mutate(target = "mean")
+
+dfD_all <- rbind(as.data.frame(dfD), as.data.frame(dfD_mean)[, names(dfD)])
+dfD_all$target <- factor(dfD_all$target, levels = c("KIF13A", "NUMA1", "SYNE1", "mean"))
+
+breaks_D <- unique(c(0, quantile(dfD_all[[var]], probs = seq(0, 1, by = 0.1),
+                                 na.rm = TRUE)))
+
+dfD_all$bin <- cut(dfD_all[[var]], breaks = breaks_D)
+levels_D <- levels(dfD_all$bin)
+dfD_all$bin <- factor(ifelse(is.na(dfD_all$bin), "calibration failed",
+                             as.character(dfD_all$bin)),
+                      levels = c(levels_D, "calibration failed"))
+col_D <- c(rev(viridis::plasma(n = length(breaks_D)))[seq_along(levels_D)], "grey90")
+
+figure_S7_D <- ggplot() +
+  geom_tile(dfD_all, mapping = aes(range1 * 100, range2 * 100, fill = bin),
+            col = "white") +
+  scale_fill_manual(values = col_D, drop = FALSE) + theme_rpcr() +
+  facet_grid(. ~ target) + coord_fixed() +
+  labs(x = "treshold 1 [%]", y = "treshold 2 [%]") +
+  theme(legend.key.size = unit(0.2, "cm"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(size = 8),
+        strip.background = element_blank(),
+        legend.position = "right",
+        legend.title = element_blank()) +
+  guides(fill = guide_legend(ncol = 1))
+
+figures[[analysis]] <- figure_S7_D
+
+figure_S7_D
+```
+
+```{r}
+#| label: panel-D-optima
+#| echo: true
+
+qcD <- res[["tres double range"]]$results_qc
+qcD <- qcD[!is.na(qcD[[var]]), ]
+
+knitr::kable(
+  rbind(
+    do.call(rbind, lapply(split(qcD, qcD$target), function(d)
+      data.frame(scope = unique(d$target), threshold1 = d$range1[which.min(d[[var]])],
+                 threshold2 = d$range2[which.min(d[[var]])], RSEcprop = min(d[[var]])))),
+    data.frame(scope = "mean across assays",
+               threshold1 = top$range1[which.min(top$mean)],
+               threshold2 = top$range2[which.min(top$mean)],
+               RSEcprop = min(top$mean, na.rm = TRUE) / 100)
+  ),
+  digits = 4, row.names = FALSE,
+  caption = "Derivative thresholds minimising the residual standard error of the calibrated proportion, per assay and for the mean across assays. threshold1 is applied before Ci, threshold2 after Ci."
+)
+```
+
+As in panel C, the mean-across-assays map is the fourth map of the panel, and
+all four share one scale, so the maps are read against one another: the assay
+differences the legend text describes ("warm colours indicate optimal threshold
+combinations") are differences between maps, which a per-map scale would hide.
+The earlier per-map `scale_fill_viridis()` version of this chunk — four
+independently scaled maps assembled with `ggpubr::ggarrange()` — is superseded;
+it inverted the colour direction as well, since viridis puts its bright end at
+the *high* RSE of the failing corner.
+
+## Appendix — the "Fixed cycle range" sweep
+
+Chunk `Figure_005` renders a second family of
+heatmaps from the `res[["Fixed cycle range"]]` sweep, using a rescaled viridis
+scale that saturates above RSE = 0.02. That sweep is **not** the
+threshold sweep of panel D: chunk `range_005` computes it with `rtype = "ip"`
+and `roff = c(range1, range2)` over the same −20…+20 cycle grid as panel C, for
+two signal types and two derivative settings — 2 × 2 × 41 × 41 = 6 724
+calibrations. It is therefore a signal-type-resolved variant of panel C's
+surface rather than a threshold surface.
+
+Because the panel map cites it alongside `range10` for panel D, it is rendered
+here when the cache provides it, clearly marked as an alternative surface. It is
+never recomputed by this document — the sweep is an order of magnitude more
+expensive than any other in the figure set, and nothing in the S7 legend
+requires it.
+
+```{r}
+#| label: appendix-fixed-cycle-range
+#| echo: true
+#| fig-width: 9
+#| fig-height: 3.5
+
+analysis <- "Fixed cycle range"
+
+if (is.null(res[[analysis]]$results_qc)) {
+
+  cat("Not rendered: res[['Fixed cycle range']] is not in the cache and this\n",
+      "document does not recompute it (2 x 2 x 41 x 41 = 6724 calibrations).\n",
+      "To populate it, run chunk `range_005` with\n",
+      "recalculate = TRUE and re-save the results cache.\n", sep = "")
+
+} else {
+
+  df <- na.omit(res[[analysis]]$results_qc)
+
+  var <- "RSEcprop"
+
+  fixed_range_maps <- lapply(genelist, function(target){
+    scaly <- 0.02
+    ggplot(df[df$target==target,], aes(range1, range2, fill= get(var))) +
+      geom_tile() +
+      scale_fill_viridis(rescaler = function(x, to = c(0, 1), from = NULL) {
+        ifelse(x<scaly,
+               scales::rescale(x, to = to,
+                               from = c(min(x, na.rm = TRUE), scaly)),
+               1)})
+  })
+
+  figures[[analysis]] <- fixed_range_maps
+  print(ggpubr::ggarrange(plotlist = fixed_range_maps, ncol = 3, nrow = 1,
+                          labels = genelist, legend = "bottom",
+                          font.label = list(size = 9, face = "bold", color = "black")))
+}
+```
+
+# Colour-scale audit
+
+The two break vectors are the deciles of the two sweeps, so they are a direct
+check on the data behind the panels: the legend of the submitted figure prints
+the same eleven intervals. Both vectors, and the published ones read off the
+submitted legend, are written to `figures/components/S7_scale_audit.txt`.
+
+```{r}
+#| label: scale-audit
+#| echo: true
+
+published_C <- c(0, 0.00417, 0.00505, 0.0056, 0.00585, 0.00637, 0.00715,
+                 0.00763, 0.00931, 0.0141, 0.0273, 0.287)
+published_D <- c(0, 0.00411, 0.00558, 0.00604, 0.0064, 0.00669, 0.00702,
+                 0.00736, 0.00767, 0.00812, 0.00863, 0.0128)
+
+audit <- data.frame(
+  panel  = c("C", "C", "D", "D"),
+  source = c("this render", "submitted", "this render", "submitted"),
+  n_breaks = c(length(breaks_C), length(published_C),
+               length(breaks_D), length(published_D)),
+  breaks = c(paste(signif(breaks_C, 3), collapse = ", "),
+             paste(signif(published_C, 3), collapse = ", "),
+             paste(signif(breaks_D, 3), collapse = ", "),
+             paste(signif(published_D, 3), collapse = ", "))
+)
+
+counts <- data.frame(
+  panel = c("C", "D"),
+  n_values = c(nrow(dfC_all), nrow(dfD_all)),
+  n_failed = c(sum(dfC_all$bin == "calibration failed"),
+               sum(dfD_all$bin == "calibration failed")),
+  max_RSE = c(max(dfC_all[[var]], na.rm = TRUE), max(dfD_all[[var]], na.rm = TRUE))
+)
+
+writeLines(c(capture.output(print(audit, row.names = FALSE)), "",
+             capture.output(print(counts, row.names = FALSE))),
+           file.path(cpath, "S7_scale_audit.txt"))
+
+knitr::kable(audit, caption = "Colour-scale breaks of panels C and D as rendered here, against the intervals printed in the legend of the submitted figure.")
+counts
+```
+
+# Save figure
+
+```{r}
+#| label: save-figure
+#| echo: true
+
+psave(filename = "ratioPCR_figure_S7A", plot = figure_S7_A, path = fpath,
+      device = "pdf", width = 20, height = 14, units = "cm", dpi = 300)
+psave(filename = "ratioPCR_figure_S7B", plot = figure_S7_B, path = fpath,
+      device = "pdf", width = 20, height = 30, units = "cm", dpi = 300)
+psave(filename = "ratioPCR_figure_S7C", plot = figure_S7_C, path = fpath,
+      device = "pdf", width = 20, height = 8, units = "cm", dpi = 300)
+psave(filename = "ratioPCR_figure_S7D", plot = figure_S7_D, path = fpath,
+      device = "pdf", width = 20, height = 8, units = "cm", dpi = 300)
+
+list.files(fpath, pattern = "^ratioPCR_figure_S7", full.names = FALSE)
+```
+
+# Provenance and repairs
+
+**The fourth map of panels C and D** — the mean across the three assays, which
+both panels' legends describe and which this document previously recorded as
+having no plotting code — comes from the sweeps that were part of
+Figure 5: the cycle-range sweep (panel C) and the threshold sweep (panel D).
+Both build a long frame over `c("mean", "KIF13A", "NUMA1", "SYNE1")` from a
+`results_qc2` table and facet on that variable, so the mean map is a facet of
+the same plot as the assay maps.
+The long frame is rebuilt from `results_qc`; `results_qc2` is carried in the
+cached results for the cycle-range sweep but not for the threshold sweep, and
+the two routes give the same 6724 and 1600 values respectively. The aggregation
+is identical to the `top_mean` used for the optimum tables, without the ×100
+that those tables apply for display.
+
+The colour treatment is **no longer** each panel's own (superseded 2026-09-14).
+The first transplant kept the fixed RSE binning in C and the per-map
+`scale_fill_viridis()` in D and recorded the quantile scaling as an
+unrelated difference. It is not unrelated: the
+scale is what the panel shows. Both panels now use the archived scripts'
+construction.
+
+**Panel A** is now built directly. Repairs:
+
+0.  **`rpcr_plotCalibCycle()` no longer draws this panel** (2026-09-14).
+    `R/rpcr_plotCalibCycle.R` maps `y = delta` — the deviation ψ_c − ψ — as
+    `geom_boxplot()` plus jitter, faceted by target. The submitted panel A is a
+    *proportion* view: `aprop` and `cprop` per relative cycle, coloured by
+    theoretical proportion, with the eleven reference proportions as dashed
+    lines and the y-axis broken at those proportions. Calling the function
+    therefore produced panel-B content under panel A's name — two panels of the
+    same figure showing the same quantity — with `get(var)` as the x-axis title
+    and `deltaPSI` as the y-axis title. The panel is now assembled from the
+    `panel-B` chunk of `ratioPCR_Figure_4.qmd`, which is the same plot for the
+    Rn signal and is the version that went into the Figure 4 panel file,
+    evaluated here for ΔRn and derRn. Whether `rpcr_plotCalibCycle()` should be
+    restored to its pre-rename behaviour is a package decision and is not made
+    here; the deviation view it returns is kept as a diagnostic under panel A.
+
+1.  **Panel composition.** The chunk arranges all six plots (Rn, ΔRn, derRn ×
+    full/zoom) into `p4a` and then into a nine-row `p4` scaffold of
+    `nullplot`s, extracted legends and a page title ("Calculation with single
+    cycle relative to inflection point") — a full-page exploratory layout, not
+    a figure panel, and it labels six plots with four labels
+    (`labels = c("A","B","C","D")`). Supplementary Figure S7A is the ΔRn and
+    derRn pair only, per its legend, with the Rn pair being Figure 4B; the panel
+    is one plot faceted `target ~ signal + variable`, i.e. three assay rows by
+    ΔRn/derRn × uncalibrated/calibrated, as in the submitted figure. The
+    `nullplot` scaffold, the page title and the `p1a`/`p1b` Rn pair are dropped.
+
+2.  **Deprecated legend extraction dropped.** `p_legend_a`/`p_legend_b1`/
+    `p_legend_b2` use `ggpubr::get_legend()` together with
+    `guides(shape = FALSE)` and `guides(color = FALSE)`; the logical form of
+    `guides()` has been deprecated since ggplot2 3.3.4 and errors on current
+    versions. They existed only to feed the dropped scaffold, so they are
+    removed rather than rewritten.
+
+3.  **Dead code removed.** The chunk filters `results` and then immediately
+    reassigns `results <- results_data`, discarding the filter; the filtered
+    copies `res_qc1`, `failed` and the destructive overwrite of `results_qc`
+    (which would corrupt the object panels B–D read) are dropped. `p5a`/`p5b`,
+    the log-scale RSE plot and the failed-calibration strip, are the
+    exploratory precursors of Figure 4C and are not part of S7.
+
+**Panel B**'s `signal`
+factor construction, the `jwidth` derivation, `plot`, `plot1` and `plot2` are
+unchanged, including the `ggh4x` strip theming. Repairs: `yzoom` is defined in
+this document, and
+`plot1b` — a duplicate of `plot1` with blanked strips, never used — is dropped.
+
+**Violin window corrected** (2026-09-14). This document previously kept
+`coord_cartesian(xlim = c(-1.1, 7.1))` with `scale_x_continuous(breaks = -1:7)`
+and recorded the legend's "C₋₅ to C₊₁₀" as the
+discrepancy, on the assumption that the code was what produced the submitted
+panel. The submitted panel settles it the other way: the inset brackets leave
+the full-range axis at −5 and +10, the lower block is ticked at −5/0/5/10, and
+it holds sixteen violins per facet. The window is now `bzoom <- c(-5, 10)`, set
+once and used by both the violin composition and the deviation table, so the
+table still covers exactly what the panel shows.
+
+**Panel C** is transplanted from chunk `range11` (line 1063) and the tile chunk
+at line 1134: the sweep, `results_qc2` with its `standardSettings` encoding, the
+`range2 > range1` filter, the axis squaring and `coord_fixed()` are unchanged.
+Repairs:
+
+0.  **Colour scale and facet direction taken from the script that produced the
+    submitted panel** (2026-09-14). The tile chunk bins RSE on a fixed
+    `c(0, 0.01, 0.011, …, 0.019, max)` vector and facets `target ~ .`; the
+    submitted panel bins at `c(0, quantile(value, seq(0, 1, 0.1)))` — eleven
+    bins over the pooled four maps — and facets `. ~ variable`. The fixed
+    vector is not a stylistic variant: on this sweep it collapses the whole
+    low-RSE region into its first bin, so the optimum the panel exists to show
+    is not visible, and the legend printed 9 intervals in the 0.010–0.019
+    decade where the submitted figure prints 11 spanning 0.00417–0.287. The
+    document now prints its break vector so that it can be compared against
+    the submitted legend directly.
+
+1.  **Recompute guard widened** from `if (recalculate)` to
+    `if (recalculate || is.null(res[[analysis]]$results_qc))`, so the panel
+    builds even when the cache does not carry this analysis.
+
+2.  **Dead code that only worked by accident removed.** The tile chunk opens
+    with a `top` assignment that loops over `datalist` and subsets on
+    `df$datatype` — a column the `range11` sweep never creates. It evaluates to
+    a zero-row frame and is then overwritten by the `pivot_wider()` version two
+    statements later. Only the surviving definition is kept. `datalist` is set
+    to `"Rn"` in the sweep chunk as in the notebook, rather than inherited from
+    `Figure_settings.R` (where it is `c("F","bF")`).
+
+3.  **Bare output path.** `ggsave(paste0(fpath, analysis, ".png"), ...)`
+    concatenates without a separator; replaced by `psave("ratioPCR_figure_S7C", ...)`.
+
+4.  **Additive readout.** The optimal window per assay and for the mean across
+    assays is tabulated so the legend's "optimal window of cycle positions" is
+    a printed value rather than a claim.
+
+**Panel D**: the threshold sweep is transplanted from chunk `range10`
+(line 945) unchanged. Repairs: the recompute guard is widened as for panel C;
+the unused `results_qc_na <- results_qc %>% replace(is.na(.), 1)` line — which
+reaches across into the single-cycle `results_qc` and is never read — is
+dropped, as is the accidental `top` assignment described above.
+
+The **tile maps** deliberately depart from the earlier continuous-scale
+rendering (2026-09-14), in which one `scale_fill_viridis()` map per assay was
+assembled from four separate plots with `ggpubr::ggarrange()`. That is not the
+submitted panel, and the mismatch is not only cosmetic: four independent scales
+cannot be compared across assays, the bright end of viridis marks the *highest*
+RSE (so the failing threshold corner reads as the optimum), the threshold axes
+stay on the sweep's 0–0.95 fraction instead of the panel's 0–100 %, and the
+assay order follows `genelist` (NUMA1, SYNE1, KIF13A) rather than the figure's
+KIF13A, NUMA1, SYNE1. The panel is built here as one plot, four facets, RSE cut
+at its deciles, reversed plasma, `range * 100` on both axes — which reproduces
+the submitted legend (eleven bins from 0.00411 to 0.0128) and its grey
+"calibration failed" corner.
+
+**Documented gaps in this figure.** The mean-across-assays heatmap named in the
+legend of both panel C and panel D is drawn since 2026-09-14, from the archived
+sweep scripts (first section of *Provenance and repairs*); it is no longer a
+gap. The `Figure_005` /
+"Fixed cycle range" surface is rendered only from cache and is, on inspection
+of chunk `range_005`, a cycle-range sweep resolved by signal type rather than
+the threshold surface of panel D.
+
+# Manuscript figure
+
+The files this document writes into `documents/figures`, re-printed here at
+the size they are written at, so that the rendered document shows the panels
+as they appear in the manuscript rather than only the analysis-sized views
+above. The final chunk checks that every file is on disk.
+
+**`ratioPCR_figure_S7A.pdf`** — panel A, 20 × 14 cm.
+
+```{r}
+#| label: manuscript-figure-S7A
+#| echo: false
+#| fig-width: 7.87
+#| fig-height: 5.51
+
+figure_S7_A
+```
+
+**`ratioPCR_figure_S7B.pdf`** — panel B, 20 × 30 cm.
+
+```{r}
+#| label: manuscript-figure-S7B
+#| echo: false
+#| fig-width: 7.87
+#| fig-height: 11.81
+
+figure_S7_B
+```
+
+**`ratioPCR_figure_S7C.pdf`** — panel C, 20 × 8 cm.
+
+```{r}
+#| label: manuscript-figure-S7C
+#| echo: false
+#| fig-width: 7.87
+#| fig-height: 3.15
+
+figure_S7_C
+```
+
+**`ratioPCR_figure_S7D.pdf`** — panel D, 20 × 8 cm.
+
+```{r}
+#| label: manuscript-figure-S7D
+#| echo: false
+#| fig-width: 7.87
+#| fig-height: 3.15
+
+figure_S7_D
+```
+
+```{r}
+#| label: manuscript-figure-files
+#| echo: false
+
+written <- c("ratioPCR_figure_S7A.pdf", "ratioPCR_figure_S7B.pdf", "ratioPCR_figure_S7C.pdf", "ratioPCR_figure_S7D.pdf")
+data.frame(file = written,
+           exists = file.exists(file.path(fpath, written)),
+           row.names = NULL)
+```
+
+# Reproducibility
+
+```{r}
+#| label: session-info
+#| echo: true
+
+if (requireNamespace("sessioninfo", quietly = TRUE)) {
+  sessioninfo::session_info()
+} else {
+  print(sessionInfo())
+}
+
+if (requireNamespace("renv", quietly = TRUE)) {
+  try(print(renv::status()), silent = TRUE)
+}
+```

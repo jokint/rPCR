@@ -1,0 +1,326 @@
+---
+title: "ratioPCR Figure S3 — Computational and experimental characterisation of isoform-specific probe cross-reactivity"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+The supplementary legends are complete in the supplied legend file and are quoted verbatim.
+
+> Supplementary Figure S3: Computational and experimental characterisation of isoform-specific probe cross-reactivity
+>
+> (A) Predicted probe–template binding specificity assessed by thermodynamic analysis. The matrix shows predicted Gibbs free energy (−ΔG, kcal/mol) of probe hybridisation to cognate and non-cognate templates for all three assays (KIF13A, NUMA1, SYNE1), evaluated separately for sense and antisense probe orientations. Inclusion probes (red) show high predicted affinity for their cognate inclusion template and negligible predicted affinity for the exclusion template (cross symbols). Exclusion probes (green) show strong affinity for the cognate exclusion template but variable predicted cross-reactivity with the inclusion template, most pronounced for NUMA1, where the exclusion probe partially overlaps with the inclusion sequence at the exon–exon junction.
+>
+> (B) Experimental validation of probe specificity using synthetic single-isoform templates. Left panels: normalised fluorescence (Rn) amplification curves from reactions containing only the exclusion template (left) or only the inclusion template (right), measured with each probe for all three assays. Right panel: endpoint ΔRn fluorescence values for all four probe–template combinations (exclusion probe on exclusion template, exclusion probe on inclusion template, inclusion probe on inclusion template, inclusion probe on exclusion template). Inclusion probes generate no detectable signal on exclusion templates across all three assays. Exclusion probes show assay-dependent cross-reactivity on inclusion templates: negligible for KIF13A and SYNE1, but clearly measurable for NUMA1, consistent with the thermodynamic predictions in panel A.
+
+<<<BLOCK
+| Panel | Content |
+|---------------------|---------------------------|
+| A | Predicted −ΔG matrix, probe × template × strand |
+| B | Rn curves and endpoint ΔRn on single-isoform templates |
+BLOCK>>>
+
+# Setup
+
+Panel B uses the 0 % and 100 % members of the calibration reference series — the two samples that contain a single isoform only — so the import is the same as for Figures 1, 3 and 4. Panel A needs the thermodynamic prediction table described below and no PCR data.
+
+```{r}
+#| label: setup
+#| echo: true
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+library(ggh4x)
+
+# Render-time recompute switch (a plain variable, not Quarto's reserved `params`).
+recalculate <- as.logical(Sys.getenv("RPCR_RECALCULATE", "TRUE"))
+
+calibrationFile <- file.path(pp, "documents", "extdata", "20191120AS calibration.xlsx")
+
+# importing data
+import <- rpcr_wrap(rpcr_readTF(calibrationFile))
+import <- import[!import$sample == "neg. ctrl", ]
+import <- rpcr_calibDetect(import, qual = "")
+```
+
+# Panel A — predicted Gibbs free energy of probe–template hybridisation
+
+Panel A is the computational half of the probe-specificity characterisation. For each of the three assays, both probes were evaluated thermodynamically against both templates and in both strand orientations, giving twelve probe–template–strand combinations per assay; the predicted free energy of hybridisation is plotted as −ΔG, so that a large symbol means a stable, and therefore a likely, hybridisation event. The matrix is what motivates carrying the two cross-reactivity terms rᵢ and rₑ as explicit parameters in the calibration model rather than assuming perfect probe specificity: an inclusion probe has essentially no predicted affinity for the exclusion template, whereas an exclusion probe spanning the exon–exon junction retains partial complementarity to the inclusion sequence, most markedly for NUMA1.
+
+## Input data
+
+The chunk reads a tab-delimited prediction table with columns `Probe.ID`, `gene`, `strand` (`sense`/`anti`), `isoform` (`inclusion`/`exclusion`) and `dG`. Here it is resolved relative to the package root. The chunk below reports whether the file is present before any plotting is attempted — if it is not, panel A is a documented gap and no values are substituted.
+
+```{r}
+#| label: panel-A-input
+#| echo: true
+
+gibbsFile <- file.path(pp, "documents", "extdata", "Gibbs energy probe.txt")
+gibbs_available <- file.exists(gibbsFile)
+
+data.frame(panel = "S3A", file = gibbsFile, exists = gibbs_available)
+```
+
+```{r}
+#| label: panel-A
+#| echo: true
+#| fig-width: 5
+#| fig-height: 3
+
+if (!gibbs_available) {
+
+  cat("Supplementary Figure S3A is not built: the thermodynamic prediction",
+      "table 'Gibbs energy probe.txt' is not present in documents/extdata.",
+      "The chunk that produces this panel (chunk Figure_Gibbs)",
+      "read it from an absolute path into a former project location, so the",
+      "file was never tracked in this repository. No predicted free energies",
+      "are substituted here; the panel remains a documented gap until the",
+      "table is restored to documents/extdata.\n")
+
+  figure_S3_A <- NULL
+
+} else {
+
+  colplot <- FALSE
+  single <- TRUE
+  analysis <- "Gibbs"
+  Gibbs <- read.delim(gibbsFile)
+
+  exclude <- c(5,8,9)
+  if (single) {
+    Gibbs <- Gibbs[!Gibbs$Probe.ID %in% exclude,]
+    Gibbs <- Gibbs[order(Gibbs$gene),]
+  }
+
+  # Row position encodes probe orientation (antisense offset 0.01) and probe
+  # isoform (exclusion offset 0.03); column position groups the three assays.
+  Gibbs$y <- (Gibbs$strand=="anti")*0.01
+  Gibbs$y <- Gibbs$y + (Gibbs$isoform=="exclusion")*0.03
+  Gibbs$y <- (1 - Gibbs$y)
+
+  Gibbs$x <- if (single) rep(c(1,2,4.5,5.5,8,9),each=4) else  rep(c(1,2,3.5,4.5,5.25,6.75,7.75,8.5,9.25),each=4)
+
+  dpi = 75
+  psize = dpi/75
+
+  figure_S3_A <- if (colplot) {
+    ggplot(Gibbs, aes(x=x, y=y, size=-dG, color= gene , alpha=-dG))
+  } else {
+    ggplot(Gibbs, aes(x=x, y=y, size=-dG*psize))
+  }
+
+  figure_S3_A <- figure_S3_A + geom_point() + theme_rpcr()
+
+  if (colplot) {
+    figure_S3_A <- figure_S3_A + scale_colour_manual(values = rpcr_col_target[1:3])
+  }
+
+  figure_S3_A <- figure_S3_A +
+    scale_y_continuous(limits = c(0, 5)) + theme_void() +
+    theme(legend.position="bottom") +
+    scale_size_continuous(range = c(0,10))
+
+  figure_S3_A <- figure_S3_A +
+    theme(axis.line=element_blank(),
+          axis.text.x=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),
+          panel.background=element_blank(),
+          panel.border=element_blank(),
+          panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),
+          plot.background=element_blank())
+
+  figures[[analysis]] <- figure_S3_A
+  print(figure_S3_A)
+}
+```
+
+## Diagnostic rendering of panel A
+
+The transplanted chunk sets `scale_y_continuous(limits = c(0, 5))`, while the row positions it computes span only 0.96–1.00. Under those limits the four probe/strand rows collapse onto one another in the lower fifth of the panel. Because this chunk has never executed, there is no rendered output to check the intent against. The rendering below is identical except that the y limits are left to the data, so the four rows are resolvable; it is included as a diagnostic and is **not** the panel. Which of the two the published figure used is a question for the authors — see the repair notes.
+
+```{r}
+#| label: panel-A-diagnostic
+#| echo: true
+#| fig-width: 5
+#| fig-height: 3
+
+if (gibbs_available) {
+  figure_S3_A_diag <- ggplot(Gibbs, aes(x = x, y = y, size = -dG*psize)) +
+    geom_point() + theme_rpcr() + theme_void() +
+    theme(legend.position = "bottom") +
+    scale_size_continuous(range = c(0, 10))
+  print(figure_S3_A_diag)
+} else {
+  cat("Not built: input table absent (see above).\n")
+}
+```
+
+# Panel B — experimental probe specificity on single-isoform templates
+
+Panel B is the experimental counterpart. The 0 % and 100 % members of the reference series contain only the exclusion or only the inclusion template, so any signal in the non-cognate channel is cross-reactivity rather than a real isoform ratio. The left block shows the raw Rn traces of both probe channels over all 45 cycles, faceted by assay and by template, coloured by probe. The right block shows the endpoint (cycle 45) baseline-subtracted signal ΔRn of the same wells, split into the correct-isoform and the cross-reactive combination, as the mean of three replicates with the standard error.
+
+## Endpoint ΔRn on the correct and the cross-reactive combination
+
+For each single-isoform sample the two probe channels are classified: the probe matching the template present is the `correct isoform` combination, the other is the `cross-reactive` combination. Columns `bFA`/`bFB` are the baseline-subtracted (ΔRn) inclusion and exclusion channels; only cycle 45 is used.
+
+```{r}
+#| label: panel-B-endpoint
+#| echo: true
+#| fig-width: 3
+#| fig-height: 6
+
+colplot <- TRUE
+target_color <- rpcr_col_target[1:3]
+iso_color <- if (colplot) rpcr_col_probe[c(1, 3)] else rev(rpcr_col_sample(2))
+
+df <- tidyr::pivot_longer(import,
+   cols = c("FA","FB","bFA","bFB"),   # columns to reshape
+    names_to = "variable",       # new column for former column names
+    values_to = "value"          # new column for values
+  )
+
+df <- df[df$sample %in% c("0", "100"), ]
+
+strip <-  ggh4x::strip_themed(background_y = if (colplot) ggh4x::elem_list_rect(fill = target_color) else element_blank(),background_x = element_blank())
+
+relabel <- as_labeller(c("bFA" = "inclusion", "bFB" = "exclusion","0" = "0%", "100" = "100%.","KIF13A" = "KIF13A","NUMA1" = "NUMA1","SYNE1" = "SYNE1","template" = "template isoform","cross"="cross-\nreactive","correct"="correct\nisoform"))
+
+
+df$info <- "template"
+df <- df[df$cycle==45&df$variable %in% c("bFA","bFB"),]
+df$cat <- FALSE
+df[df$sample==0,]$cat <- df[df$sample==0,]$variable=="bFB"
+df[df$sample==100,]$cat <- df[df$sample==100,]$variable=="bFA"
+
+df$cat <- c("correct","cross")[2-1*df$cat]
+
+p3 <- ggplot() + stat_summary(data=df,aes(x=sample,y=value,group=variable), fun = mean, position="dodge",geom="col", size=0.5,lty=1,col="black",fill=rep(iso_color,6),width = 0.7) + # ,fill=rep(iso_color,6)) +
+   # scale_fill_manual(values=iso_color) +
+  stat_summary(data=df,aes(x=sample,y=value),fun.data = mean_se, geom = "errorbar",
+     width = 0.5, size = 0.5, col = "black") +
+  scale_y_continuous(breaks = c(0,5,10),labels = scales::number_format(accuracy = 1)) +
+  ggh4x::facet_grid2(target ~ cat,strip=strip,labeller = relabel,scales="free_x", independent = "x") +
+  theme_rpcr()  +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme( axis.text.y=element_text(size = 10),panel.spacing = unit(1, "lines"),strip.text.y = element_blank(),strip.text.x=element_text(size = 10,face = "plain")) +
+  scale_x_discrete(labels=c("0%", "100%")) +
+  labs(x ="prop of samples \n ", y = "Flourescence signal [deltaRn]")+
+            theme(axis.text = element_text(size = 8),axis.title = element_text(face="plain"),axis.text.y = element_text(face="plain"))
+
+p3
+```
+
+```{r}
+#| label: panel-B-endpoint-values
+#| echo: true
+
+# Endpoint deltaRn per assay, template and probe combination, as plotted.
+knitr::kable(
+  df %>%
+    group_by(target, sample, variable, cat) %>%
+    summarise(n = n(), mean_deltaRn = mean(value), se = sd(value)/sqrt(n()), .groups = "drop") %>%
+    arrange(target, sample, variable),
+  digits = 3,
+  caption = "Endpoint (cycle 45) baseline-subtracted fluorescence for the four probe-template combinations. sample 0 = exclusion template only, 100 = inclusion template only; bFA = inclusion probe, bFB = exclusion probe. 'cross' rows are the non-cognate combinations."
+)
+```
+
+## Rn amplification curves on the single-isoform templates
+
+The same wells shown as raw Rn traces. Columns `FA`/`FB` are the normalised inclusion and exclusion channels; every well contributes one line per channel, coloured by probe, faceted by assay (rows) and template (columns).
+
+```{r}
+#| label: panel-B-curves
+#| echo: true
+#| fig-width: 6
+#| fig-height: 6
+
+df <-
+  tidyr::pivot_longer(import,
+    cols = c("FA","FB","bFA","bFB"),   # columns to reshape
+    names_to = "variable",       # new column for former column names
+    values_to = "value"          # new column for values
+  )
+
+
+df <- df[df$sample %in% c("0", "100"), ]
+
+df$info <- "template"
+a <- "FA"
+b <- "FB"
+df <- df[df$variable %in% c(a,b),]
+df$cat <- FALSE
+df[df$sample==0,]$cat <- df[df$sample==0,]$variable==b
+df[df$sample==100,]$cat <- df[df$sample==100,]$variable==a
+
+df$cat <- c("correct","cross")[2-1*df$cat]
+
+
+plot <- ggplot(data=df,aes(x=cycle,y=value,group=interaction(well,variable),col=variable)) + geom_line() + ggh4x::facet_grid2(target~sample,axes = "all")
+plot <- plot + theme(axis.line=element_line(colour = "black", linewidth = 1),
+                    strip.background = element_blank(),
+                     axis.title.x=element_blank(),
+                     axis.title.y=element_blank(),
+                    panel.background=element_blank(),
+      panel.grid.major=element_blank(),
+      panel.grid.minor=element_blank()) +
+  scale_colour_manual(values=c(rpcr_col_probe[1],rpcr_col_probe[3]))
+
+plot
+```
+
+## Assembled panel B
+
+```{r}
+#| label: panel-B
+#| echo: true
+#| fig-width: 9
+#| fig-height: 6
+
+figure_S3_B <- ggpubr::ggarrange(plot, p3, common.legend = TRUE, legend = "bottom", widths = c(5,2))
+
+figure_S3_B
+```
+
+# Save figure
+
+```{r}
+#| label: save-figure
+#| echo: true
+
+if (!is.null(figure_S3_A)) {
+  psave(filename = "ratioPCR_figure_S3A", plot = figure_S3_A, path = fpath,
+        device = "pdf", width = 10, height = 6, units = "cm", dpi = 300)
+}
+
+psave(filename = "ratioPCR_figure_S3B", plot = figure_S3_B, path = fpath,
+      device = "pdf", width = 15, height = 15, units = "cm", dpi = 300)
+
+list.files(fpath, pattern = "^ratioPCR_figure_S3", full.names = FALSE)
+```

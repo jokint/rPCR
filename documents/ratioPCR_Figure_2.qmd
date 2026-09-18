@@ -1,0 +1,559 @@
+---
+title: "ratioPCR Figure 2 — Kinetic simulation of multi-template PCR and heteroduplex-driven ratio distortion"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+> **Figure 2: Kinetic simulation of multi-template PCR and heteroduplex-driven ratio distortion**
+>
+> An example simulation with 40% target A and 60% target B at 1×10⁶ total copies illustrates the overall reaction trajectory: amplicon concentrations remain negligible for approximately the first 15 cycles before entering exponential growth, with heteroduplex species accumulating progressively at later cycles as amplicon concentrations rise (Figure 2A). Time-course profiles across all 45 cycles confirm progressive primer depletion and the marked acceleration of heteroduplex formation during the plateau phase (Figure 2B). \[…\] introducing asymmetric rehybridisation rates, specifically reducing the heteroduplex association rate constant for target B from 1×10⁶ to 2×10⁵ M⁻¹s⁻¹ (Figure 2C), disrupted the linear amplicon relationship for all input ratios other than 0, 0.5, and 1 (Figure 2D), and resulted in progressive drift of the apparent proportion toward 1:1 during amplification (Figure 2E). Comparison of initial template proportions with final amplicon proportions confirmed systematic, ratio-dependent bias (Figure 2F), with the magnitude and direction of distortion following a characteristic S-shaped profile dependent on the starting proportion (Figure 2G).
+
+## Simulation provenance and choice of scenario directory
+
+The kinetic model is an OpenModelica/BioChem system of more than 250 coupled ODEs representing primer–template hybridisation, strand synthesis, rehybridisation, heteroduplex formation, probe hybridisation and fluorescence generation. It is **not** re-run at render time: OpenModelica is not part of the rendering environment, and the simulation outputs are stored in the repository, one directory per scenario under `documents/rPCRsim/`. Each directory holds `model/Para.csv` (the parameter set actually submitted), `model/rPCR_03_res.csv`, `results/results.rds` and `results/results_small.rds`.
+
+Two scenario directories back this figure, and the assignment is stated here because it is not self-evident from the file names:
+
+| Panel | Scenario directory | Why |
+|----|----|----|
+| A, B | `Sim_standard_kinetic` | A *single* run (one starting proportion) at intra-cycle resolution (`stepSize = 0.5` s against a 45 s cycle), no probes, symmetric rehybridisation. This is the only stored scenario that resolves the within-cycle trajectory of a single example reaction, which is what panels A and B show (primer depletion and heteroduplex accumulation *within* and *across* cycles). `settings.txt` records `startTemplate = copytoconc(1e6)` and `startRatio = 0.6`. |
+| C–G | `Sim_heteroduplex` | A nested batch over `hetero_k1 = seq(3e5, 1e6, 1e5)` and `startRatio = seq(0, 1, 0.1)`, no probes. This is the asymmetric-rehybridisation scan whose amplicon relationship, apparent-proportion drift and initial-vs-final proportion panels are built by the "Heteroduplex" block. |
+
+`documents/figure_panel_map.csv` attributes panels A and B to `Sim_complex`. That attribution is not adopted here: `Sim_complex` is a *nested* batch over 11 starting proportions with probes and five superimposed bias sources, and the code that produces amplicon/primer/heteroduplex time courses for a single example reaction (the "Standard kinetic" block) reads `Sim_standard_kinetic`. `Sim_complex` backs Supplementary Figure S5E instead.
+
+# Setup
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+source(file.path(pp, "documents", "scripts", "omPCR_functions.R"))
+# REPAIR (render fix): rpcr_plotData() -- and rpcr_plotPanel(), which calls it --
+# expects the package's internal fluorescence contract: FA/FB for signal = "Rn"
+# and bFA/bFB for the baseline-subtracted signal. Those are the columns
+# rpcr_wrap() creates for instrument data. omTrans() names the simulated
+# equivalents Fincl/Fexcl and bFincl/bFexcl, so the two contracts must be
+# bridged explicitly before any package plotting function is called.
+# REPAIR (render fix): ratioPCR 0.1.0 maps `sample` onto a CONTINUOUS colour
+# scale in rpcr_plotData() (ggplot2::scale_colour_gradientn, R/rpcr_plotData.R:246),
+# but the sample labels are character ("Cal0" ... "Cal100"). The coercion that used
+# to bridge this lives commented-out in the package at R/rpcr_plotData.R:62-67,
+# marked "removed 30.06.2026", so the call now aborts with "Discrete value supplied
+# to a continuous scale". Restoring the numeric column reproduces the pre-removal
+# behaviour without modifying the installed package.
+rpcr_sim_contract <- function(df) {
+  df$FA  <- df$Fincl
+  df$FB  <- df$Fexcl
+  df$bFA <- df$bFincl
+  df$bFB <- df$bFexcl
+  # Same contract gap on the colour aesthetic: omTrans() writes sample as
+  # paste0("Cal", par_startRatio * 100), a character, while rpcr_plotData() maps
+  # `sample` onto a continuous gradient (see the note in the setup chunk).
+  df$sample <- as.numeric(gsub("[^0-9.]", "", as.character(df$sample)))
+  df
+}
+
+
+library(ggplot2)
+library(ratioPCR)
+
+# Paths. `Figure_settings.R` points `fpath` at documents/figures; the
+# simulation scripts write into the Simulations subfolder, which is recreated
+# here so that psave() never fails on a missing directory.
+path_sim <- file.path(pp, "documents", "rPCRsim")
+fpath    <- file.path(pp, "documents", "figures")
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+# Scenario directories backing this figure (see "Simulation provenance" above).
+sim_kinetic <- "Sim_standard_kinetic"
+sim_hetero  <- "Sim_heteroduplex"
+
+# Re-simulation switch. Kept FALSE: re-running the model requires OpenModelica
+# and the rPCR_03 model tree, neither of which is available at render time.
+# REPAIR: the source script left one omPCRBatch() call live at top level, which
+# would abort the render; every simulation call is now behind this switch.
+# No Quarto `params:` block is used, since Quarto locks that binding and a
+# separate script defines its own `params` list.
+resimulate <- as.logical(Sys.getenv("RPCR_RESIMULATE", "FALSE"))
+simModel   <- "rPCR_03"
+simPath    <- file.path(Sys.getenv("HOME"), "openmodelica", simModel)
+
+# Panel theme, defined here as a REPAIR for session leakage: the object was
+# previously inherited from whatever had been sourced earlier in the
+# interactive session.
+theme_figure <- theme(
+  axis.text.y = element_text(size = 5, face = "plain"),
+  axis.text.x = element_text(size = 5),
+  panel.grid.major = element_blank(),
+  axis.text = element_text(size = 5),
+  axis.title = element_text(face = "plain"),
+  axis.title.y = element_text(vjust = 0),
+  strip.placement = "outside",
+  strip.text.y = element_text(vjust = 0, size = 8),
+  plot.margin = margin(0, 0, 0, 0, "cm"))
+
+# Standard kinetic parameter set of the model. Every scenario below is this
+# set plus the deviations stated in its own section. Kept in the document
+# because the panel chunks reference `para` and because it documents which
+# rate constants the published panels were run with.
+stdPara <- data.frame(
+  tolerance = 1e-8,
+  cycle_max = 45,
+  cycle_time = 45,
+  startPrimer = 500 * 1e-9, # nM
+  startTemplate = copytoconc(1e6), # copies
+  startRatio = 0.5,
+  ProbeA = 0 * 1e-9, # nM
+  ProbeB = 0 * 1e-9, # nM
+  Signal_A = 0,
+  Signal_B = 0,
+  Primer_k1 = 2e5,
+  # literature: 5e5 /M s
+  Primer_k2 = 1e-3,
+  # literature: 1e-4 /s
+  ProbeA_k1 = 3e5,
+  ProbeA_k2 = 1e-3,
+  ProbeB_k1 = 3e5,
+  ProbeB_k2 = 1e-3,
+  hetero_k1 = 1e6,
+  hetero_k2 = 1e-4,
+  rehybA_k1 = 1e6,
+  rehybA_k2 = 1e-4,
+  rehybB_k1 = 1e6,
+  rehybB_k2 = 1e-4,
+  Polymerase = 2e-7,
+  RdsPoly_k1 = 1e6,
+  RdsPoly_k2 = 1e-3,
+  RiniPoly_k1 = 1e6,
+  RiniPoly_k2 = 1e-3,
+  RextPoly_k1 = 60,
+  sFluoA = 50e6,
+  sFluoB = 50e6,
+  bFluoA = 1,
+  bFluoB = 1,
+  lFluoA = 0,
+  lFluoB = 0,
+  Aa_PB_k1 = 1e-20,
+  Aa_PB_k2 = 1e20,
+  Ba_PA_k1 = 1e-20,
+  Ba_PA_k2 = 1e20
+)
+
+stdPara$stopTime <- stdPara$cycle_time * stdPara$cycle_max
+stdPara$stepSize <- stdPara$cycle_time
+
+# Simulation results imported for this document.
+results_kinetic <- readRDS(file.path(path_sim, sim_kinetic, "results", "results.rds"))
+results_hetero  <- readRDS(file.path(path_sim, sim_hetero,  "results", "results.rds"))
+```
+
+The parameter set that was actually submitted for each scenario is stored next to the results and is printed here rather than restated from the manuscript, so that the document reports the simulation it reads instead of the simulation it expects.
+
+```{r}
+#| label: simulation-settings
+
+sim_settings <- do.call(rbind, lapply(c(sim_kinetic, sim_hetero), function(s) {
+  x <- read.delim(file.path(path_sim, s, "settings.txt"))
+  data.frame(scenario = s, x[, c("startTemplate", "startRatio", "cycle_max",
+                                 "stepSize", "ProbeA", "ProbeB", "hetero_k1",
+                                 "rehybA_k1", "rehybB_k1")])
+}))
+knitr::kable(
+  sim_settings,
+  caption = paste("Parameter sets recorded in settings.txt for the two scenario",
+                  "directories backing Figure 2. Nested sweeps (hetero_k1 and",
+                  "startRatio for Sim_heteroduplex) override the single values",
+                  "shown here; the swept grids are read back from the results",
+                  "object in the panel chunks.")
+)
+```
+
+------------------------------------------------------------------------
+
+# Panel A — Example reaction trajectory
+
+Panel A shows a single simulated reaction at 1×10⁶ total template copies with unequal input proportions, resolved *within* each PCR cycle rather than at cycle end points. Amplicon concentrations remain negligible over roughly the first 15 cycles, because at low template concentration the strand-synthesis flux is limited by template rather than by primer or polymerase; only once amplicon concentration becomes comparable to the primer concentration do re-annealing reactions start to compete with primer annealing. The three single-cycle windows (cycles 1, 23 and 45) are the components from which the published panel is composed: early cycle, exponential phase, plateau.
+
+`omTrans()` maps the raw OpenModelica output onto the plotting contract used throughout the package: `Fincl`/`Fexcl` are the two amplicon strands (`totalA`/`totalB`), `totalPra` is free primer, and `AaBs.c + AsBa.c` is the heteroduplex pool.
+
+```{r}
+#| label: fig2-panel-a
+#| fig-cap: "Panel A components. Top: full reaction trajectory of both amplicons over all 45 cycles at 0.5 s resolution, with cycle-end values marked. Bottom: intra-cycle detail at cycles 1, 23 and 45 for amplicon concentration, free primer and heteroduplex."
+#| fig-width: 8
+#| fig-height: 8
+
+para <- stdPara
+para$stepSize  <- 0.5
+para$startRatio <- 0.6
+
+title   <- "standard_kinetic"
+expName <- paste0("Sim_", title)
+
+if (resimulate) {
+  results_kinetic <- omPCRBatch(simModel,
+                                simPath,
+                                override = para,
+                                nestedList = NULL,
+                                logdir = expName,
+                                project = title,
+                                details = TRUE,
+                                expName = expName)
+}
+
+
+results_kinetic <- omnorm(results_kinetic)
+
+df0 <- omTrans(results_kinetic)
+
+p1 <- ggplot(data=df0) +
+  geom_line(aes(x=time,y=Fincl),alpha=0.2,col=rpcr_col_probe[[1]],linetype=2) +
+  geom_point(data=df0[(df0$time-(df0$cycle-1)*45)==45,],aes(x=time,y=Fincl),col=rpcr_col_probe[[1]]) +
+  geom_line(aes(x=time,y=Fexcl),alpha=0.2,col=rpcr_col_probe[[3]],linetype=2) +
+  geom_point(data=df0[(df0$time-(df0$cycle-1)*45)==45,],aes(x=time,y=Fexcl),col=rpcr_col_probe[[3]]) +
+  theme_rpcr()
+
+p <- list()
+cycles <- c(1,23,45)
+
+p <-lapply(cycles, function(cycle) {
+  p <- list()
+  p$template <- ggplot(data=df0[df0$cycle==cycle,]) +
+    geom_line(aes(x=time,y=Fincl),col=rpcr_col_probe[[1]]) +
+    geom_line(aes(x=time,y=Fexcl),col=rpcr_col_probe[[3]]) +
+    theme_rpcr() + theme_figure +
+    scale_y_continuous(label= function(x)  gsub("\\-0","-",gsub("\\+0", "", formatC(x, format = "e", digits = 1))))
+
+  p$primer <- ggplot(data=df0[df0$cycle==cycle,]) +
+    geom_line(aes(x=time,y=totalPra)) +
+    theme_rpcr() + theme_figure +
+    scale_y_continuous(label= function(x)  gsub("\\-0","-",gsub("\\+0", "", formatC(x, format = "e", digits = 1))))
+
+  p$hetero <- ggplot(data=df0[df0$cycle==cycle,]) +
+    geom_line(aes(x=time,y=AaBs.c + AsBa.c)) +
+    theme_rpcr() + theme_figure +
+    scale_y_continuous(label= function(x)  gsub("\\-0","-",gsub("\\+0", "", formatC(x, format = "e", digits = 1))))
+
+  p
+})
+
+ggarrange(
+  p1,
+  ggarrange(plotlist = lapply(1:3, function(i) p[[i]]$template), ncol = 3, nrow = 1),
+  ggarrange(plotlist = lapply(1:3, function(i) p[[i]]$primer),   ncol = 3, nrow = 1),
+  ggarrange(plotlist = lapply(1:3, function(i) p[[i]]$hetero),   ncol = 3, nrow = 1),
+  ncol = 1, nrow = 4, heights = c(2, 1, 1, 1)
+)
+```
+
+The published panel is assembled outside R from the individual component PDFs that the Save-figure section writes to `figures/components` (`Figure_Sim_standard_kinetic`, `…_c1_template`, `…_c23_primer`, and so on, each 2.5 × 1.5 cm). The arrangement rendered above is a reading aid for this document and is not itself saved as the figure panel.
+
+::: callout-note
+## Which template is "A"
+
+`settings.txt` for `Sim_standard_kinetic` records `startRatio = 0.6`, and the model convention used throughout the single-cycle analyses is `sA = startTemplate · startRatio`, i.e. 60% target A / 40% target B. The manuscript legend states 40% target A and 60% target B. The two differ by an A/B label swap, not by a different simulation; the trajectory shown is the one stored in this directory.
+:::
+
+------------------------------------------------------------------------
+
+# Panel B — Time course across all 45 cycles
+
+Panel B superimposes every cycle of the same reaction on a common intra-cycle time axis, which turns the cycle-to-cycle progression into a fan of curves. Read this way, two features of the plateau phase are explicit: free primer is consumed progressively until the primer-annealing flux can no longer outcompete strand re-annealing, and heteroduplex formation accelerates over the last cycles as the two amplicons reach concentrations at which cross-annealing becomes probable. Both are prerequisites of the ratio distortion analysed in panels C–G.
+
+```{r}
+#| label: fig2-panel-b
+#| fig-cap: "Panel B components. Left: the three reference cycles (1, 23, 45) on a common intra-cycle axis. Right: all 45 cycles overlaid, for amplicon concentration (top), free primer (middle) and heteroduplex concentration (bottom)."
+#| fig-width: 8
+#| fig-height: 7
+
+p$template <- ggplot(data=df0[df0$cycle %in% cycles,]) +
+  geom_line(aes(x=time-(cycle-1)*45,y=Fincl,linetype=factor(cycle)),col=rpcr_col_probe[[1]]) +
+  geom_line(aes(x=time-(cycle-1)*45,y=Fexcl,linetype=factor(cycle)),col=rpcr_col_probe[[3]]) +
+  theme_rpcr() + theme_figure + scale_linetype_discrete() +
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position="none")
+p$primer <- ggplot(data=df0[df0$cycle %in% cycles,]) +
+  geom_line(aes(x=time-(cycle-1)*45,y=totalPra,linetype=factor(cycle))) +
+  theme_rpcr() + theme_figure +
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position="none")
+
+p$hetero <- ggplot(data=df0[df0$cycle %in% cycles,]) +
+  geom_line(aes(x=time-(cycle-1)*45,y=AaBs.c + AsBa.c,group=cycle)) +
+  theme_rpcr() + theme_figure +
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position="none")
+
+p$template_all <- ggplot(data=df0) +
+  geom_line(aes(x=time-(cycle-1)*45,y=Fincl,group=cycle),col=rpcr_col_probe[[1]],linewidth=0.25) +
+  geom_line(aes(x=time-(cycle-1)*45,y=Fexcl,group=cycle),col=rpcr_col_probe[[3]],linewidth=0.25) +
+  theme_rpcr() + theme_figure + scale_linetype_discrete() +
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position="none")
+p$primer_all <- ggplot(data=df0) +
+  geom_line(aes(x=time-(cycle-1)*45,y=totalPra,group=cycle),linewidth=0.25) +
+  theme_rpcr() + theme_figure +
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position="none")
+p$hetero_all <- ggplot(data=df0) +
+  geom_line(aes(x=time-(cycle-1)*45,y=AaBs.c + AsBa.c,group=cycle),linewidth=0.25) +
+  theme_rpcr() + theme_figure +
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        legend.position="none")
+
+ggarrange(p$template, p$template_all,
+          p$primer,   p$primer_all,
+          p$hetero,   p$hetero_all,
+          ncol = 2, nrow = 3)
+```
+
+------------------------------------------------------------------------
+
+# Panel C — Asymmetric rehybridisation scenario
+
+Panels C–G come from the `Sim_heteroduplex` batch, in which the heteroduplex association rate constant is swept while the homoduplex rehybridisation rates of both templates are held at 1×10⁶ M⁻¹s⁻¹. Lowering the heteroduplex rate is the physically motivated case: a heteroduplex carries the mismatched region formed by the alternatively spliced segment and therefore anneals less readily than either homoduplex. Panel C shows the amplification behaviour of the two amplicons under this asymmetry, which is the input to the ratio analyses that follow.
+
+The swept grid is read back from the results object rather than restated, so the document reports the rate constants that were actually simulated.
+
+```{r}
+#| label: fig2-hetero-grid
+
+grid_hetero <- data.frame(
+  parameter = c("hetero_k1 (M^-1 s^-1)", "startRatio"),
+  n_levels  = c(length(unique(results_hetero$par_hetero_k1)),
+                length(unique(results_hetero$par_startRatio))),
+  minimum   = c(min(results_hetero$par_hetero_k1), min(results_hetero$par_startRatio)),
+  maximum   = c(max(results_hetero$par_hetero_k1), max(results_hetero$par_startRatio))
+)
+knitr::kable(grid_hetero,
+             caption = "Parameter grid actually present in Sim_heteroduplex/results/results.rds.")
+```
+
+::: callout-important
+## Rate constant stated in the legend
+
+The legend describes the heteroduplex association rate constant of target B as reduced from 1×10⁶ to 2×10⁵ M⁻¹s⁻¹. The stored sweep runs from 3×10⁵ to 1×10⁶ M⁻¹s⁻¹ in steps of 1×10⁵ (table above), and `hetero_k1` is a single association rate for the heteroduplex species, not a per-target constant; the per-target constants in the model are `rehybA_k1` and `rehybB_k1`, both held at 1×10⁶ here. No scenario directory in `documents/rPCRsim/` uses 2×10⁵ for any association rate. The lowest simulated value, 3×10⁵, is the one plotted at the strongest alpha in the panels below. This discrepancy is flagged rather than silently reconciled.
+:::
+
+```{r}
+#| label: fig2-panels-cdefg
+#| fig-cap: "Output of rpcr_plotPanel() on the Sim_heteroduplex batch: the four (or more) standard simulation views, colour-coded by starting proportion and alpha-coded by heteroduplex association rate."
+#| fig-width: 9
+#| fig-height: 3
+
+title   <- "heteroduplex"
+para    <- stdPara
+para$stepSize <- para$cycle_time
+expName <- paste0("Sim_", title)
+
+nlist <- list(hetero_k1 = seq(3e5,1e6,1e5),
+              startRatio = seq(0,1,0.1))
+
+if (resimulate) {
+  results_hetero <- omPCRBatch(simModel,
+                               simPath,
+                               override = para,
+                               nestedList = nlist,
+                               logdir = expName,
+                               project = title,
+                               details = FALSE,
+                               expName = expName)
+}
+
+# REPAIR: the script calls omTrans(results, sample = "par_startRatio").
+# omTrans() (documents/scripts/omPCR_functions.R) has no `sample` argument —
+# its formals are (data, signal, target, col, sdfac, seed) — so the call aborts
+# with "unused argument". The run-time snapshot stored next to these results
+# (rPCRsim/Sim_heteroduplex/rP_Figure_Sim_2025-08-27_1542.R) uses the plain
+# call, which is what produced the submitted panels; that is restored here.
+df0 <- omTrans(results_hetero)
+df0 <- rpcr_sim_contract(df0)
+
+plots <- rpcr_plotPanel(df0, alpha = "par_hetero_k1", wline = 0.35)
+
+plots[[1]]
+```
+
+Panel C is the first element returned by `rpcr_plotPanel()` — the amplification curves of both amplicons under the swept heteroduplex rate.
+
+------------------------------------------------------------------------
+
+# Panel D — Amplicon A against amplicon B
+
+Plotting one amplicon against the other removes the cycle axis and isolates the *relative* kinetics of the two templates. Under symmetric rehybridisation this relationship is a straight line through the origin whose slope is the input ratio (Supplementary Figure S5B). With the heteroduplex rate reduced, the relationship bends for every input proportion except 0, 0.5 and 1 — the three cases in which the two templates experience identical re-annealing competition (one template absent, or both equally abundant).
+
+```{r}
+#| label: fig2-panel-d
+#| fig-cap: "Panel D. Amplicon A concentration against amplicon B concentration for each input proportion (colour) and heteroduplex association rate (alpha)."
+#| fig-width: 3.5
+#| fig-height: 3
+
+plots[[2]]
+```
+
+------------------------------------------------------------------------
+
+# Panel E — Drift of the apparent proportion during amplification
+
+The apparent proportion ψₐ computed from the two amplicon concentrations is constant only if both templates amplify with the same per-cycle efficiency. Panel E tracks ψₐ cycle by cycle and shows it drifting monotonically toward 1:1: the minority template holds a proportionally larger share of its strands in heteroduplexes, which are not extension substrates, so the majority template is inhibited more strongly in absolute terms and the measured ratio is pulled toward equimolarity. The mechanism is dissected at single-cycle resolution in Supplementary Figure S6.
+
+```{r}
+#| label: fig2-panel-e
+#| fig-cap: "Panel E. Apparent proportion over cycles for each input proportion (colour) and heteroduplex association rate (alpha)."
+#| fig-width: 3.5
+#| fig-height: 3
+
+plots[[3]]
+```
+
+------------------------------------------------------------------------
+
+# Panel F — Initial template proportion against final amplicon proportion
+
+Panel F collapses each trace of panel E to its end point and plots the final amplicon proportion against the input template proportion. Deviation from the identity line is the ratio-dependent bias that the analytical calibration model of Figure 3 has to absorb; it is zero at 0, 0.5 and 1 and largest at intermediate proportions.
+
+```{r}
+#| label: fig2-panel-f
+#| fig-cap: "Panel F. Final amplicon proportion against initial template proportion, for each heteroduplex association rate."
+#| fig-width: 3.5
+#| fig-height: 3
+
+# Object `ratioPlot` of the "Heteroduplex" block, saved as
+# Figure_Sim_ratioPlot.pdf.
+basic_plot <- ggplot() + theme_rpcr() +
+  scale_colour_gradientn(colours = rpcr_col_probe) +
+  theme_figure + theme(legend.position = "none")
+
+ratioPlot <- basic_plot +
+  geom_line(data = df0[df0$cycle == max(df0$cycle), ],
+            aes(x = par_startRatio,
+                y = ratio,
+                group = interaction(df0[df0$cycle == max(df0$cycle), "par_hetero_k1"])),
+            linewidth = 0.5) +
+  scale_x_continuous(breaks = seq(0, 1, 0.2), limits = c(-0.1, 1.1)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.2), limits = c(-0.1, 1.1)) +
+  # REPAIR: the archived object blanks both axis titles, because the panel was
+  # labelled at layout stage. They are labelled here so the document reads on
+  # its own; nothing else in the panel changed.
+  labs(x = "template ratio", y = "amplicon ratio") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+ratioPlot
+```
+
+------------------------------------------------------------------------
+
+# Panel G — S-shaped distortion profile
+
+Panel G expresses the same relationship as the *deviation* of the final proportion from the input proportion, which turns the bias into the characteristic S-shaped profile: positive below ψ = 0.5, negative above it, crossing zero at 0, 0.5 and 1. This is the profile the calibration parameter γ of Equation 2 reproduces, and the link between the mechanistic model and the analytical correction: varying γ alone produces a distortion pattern qualitatively identical to this panel.
+
+The panel is the fourth and last element returned by `rpcr_plotPanel()`. `R/rpcr_plotPanel.R` takes elements 3–5 of `rpcr_plotData()` — `grid_lines`, `phase_plot` and `ratio_plot`, i.e. panels C, D and E — and then *appends* one plot of its own: `y = ratio - par_startRatio` against `x = par_startRatio` at the last cycle, y-limits ±0.15, labelled "residuals". That is this panel. Earlier versions of this document assumed elements 2–4 were D, E and F and that G would be a fifth element; the function returns four, and its fourth is the deviation view, not the proportion view. Panel F is the archived `ratioPlot` object rebuilt above.
+
+```{r}
+#| label: fig2-panel-g
+#| fig-cap: "Panel G. Deviation of the final amplicon proportion from the input proportion as a function of the input proportion."
+#| fig-width: 3.5
+#| fig-height: 3
+
+stopifnot(length(plots) == 4)
+
+plots[[4]]
+```
+
+------------------------------------------------------------------------
+
+# Save figure
+
+Panels C–G are written into `documents/figures` as `ratioPCR_figure_2C.pdf` … `ratioPCR_figure_2G.pdf`, and the three-panel arrangement built by the source script as `ratioPCR_figure_2D-E-G.pdf` (it holds `plots[2:4]`, which are D, E and G; the earlier `ratioPCR_figure_2D-F.pdf` held the same three plots under a wrong label). Panels A and B were assembled outside R from the single-cycle and full-course plots below, so no single file is the published panel: those pieces go to `documents/figures/components` under their working names.
+
+```{r}
+#| label: save-figures
+
+title <- "standard_kinetic"
+
+psave(paste0("Figure_Sim_", title), p1, path = cpath, dpi = 300, width = 15.5, height = 9, device = "pdf")
+
+invisible(lapply(1:3, function(cycle){
+  psave(paste0("Figure_Sim_",title,"_c",cycles[cycle],"_template"),p[[cycle]]$template, path = cpath, dpi = 300, width = 2.5, height = 1.5, device = "pdf")
+  psave(paste0("Figure_Sim_",title,"_c",cycles[cycle],"_primer"),p[[cycle]]$primer, path = cpath, dpi = 300, width = 2.5, height = 1.5, device = "pdf")
+  psave(paste0("Figure_Sim_",title,"_c",cycles[cycle],"_hetero"),p[[cycle]]$hetero, path = cpath, dpi = 300, width = 2.5, height = 1.5, device = "pdf")
+}))
+
+psave(paste0("Figure_Sim_",title,"_template"), p$template, path = cpath, dpi = 300, width = 2.5, height = 2, device = "pdf")
+psave(paste0("Figure_Sim_",title,"_primer"), p$primer, path = cpath, dpi = 300, width = 2.5, height = 2, device = "pdf")
+psave(paste0("Figure_Sim_",title,"_hetero"), p$hetero, path = cpath, dpi = 300, width = 2.5, height = 2, device = "pdf")
+
+psave(paste0("Figure_Sim_",title,"_template_all"), p$template_all, path = cpath, dpi = 300, width = 2.5, height = 2, device = "pdf")
+psave(paste0("Figure_Sim_",title,"_primer_all"), p$primer_all, path = cpath, dpi = 300, width = 2.5, height = 2, device = "pdf")
+psave(paste0("Figure_Sim_",title,"_hetero_all"), p$hetero_all, path = cpath, dpi = 300, width = 2.5, height = 2, device = "pdf")
+
+# Panels C-G, individually and as the arrangement built by the source script.
+title <- "heteroduplex"
+
+# rpcr_plotPanel() returns four elements: C, D, E and — as its own appended
+# plot — the deviation view G. Panel F is `ratioPlot`, rebuilt from the
+# archived script. The mapping is explicit rather than derived from LETTERS,
+# because the returned list is not a contiguous panel range.
+panel_letters <- c("C", "D", "E", "G")
+stopifnot(length(plots) == length(panel_letters))
+
+invisible(lapply(seq_along(plots), function(i)
+  psave(paste0("ratioPCR_figure_2", panel_letters[i]), plots[[i]],
+        dpi = 300, width = 4, height = 4, device = "pdf")))
+
+psave("ratioPCR_figure_2F", ratioPlot, dpi = 300, width = 4, height = 4, device = "pdf")
+
+# The three-panel arrangement built by the source script is plots[2:4], i.e.
+# D, E and G — not D-F. It is written under a name that says so; the old
+# ratioPCR_figure_2D-F.pdf carried the same three plots under a wrong label.
+figure <- ggarrange(plotlist = plots[2:4],
+                    ncol = 3,
+                    labels = c("D","E","G"),
+                    common.legend = TRUE,
+                    legend="none",
+                    widths = c(1,1,1),
+                    font.label=list(color="black",size=10))
+
+psave("ratioPCR_figure_2D-E-G",
+      figure,
+      dpi = 300,
+      width = 11,
+      height = 4,
+      device = "pdf")
+```
+
+The source script labelled this arrangement `c("H","J","J")`, which are placeholder labels left over from an earlier figure layout; they are replaced by the manuscript panel letters the three plots actually carry, D, E and G. Nothing else in the arrangement changes.
+
+## Panels F and G — correction of the element mapping
+
+Two panels were previously recorded as gaps or mislabelled in this document, and both are recoverable:
+
+-   **F** — `ratioPlot` of the "Heteroduplex" block, saved as `Figure_Sim_ratioPlot.pdf`. Transplanted above, with the axis titles restored.
+-   **G** — the fourth element of `rpcr_plotPanel()`. `R/rpcr_plotPanel.R` returns `rpcr_plotData()[3:5]` (C, D, E) and appends its own deviation plot (`ratio - par_startRatio` against `par_startRatio` at the last cycle, "residuals", ±0.15). The earlier reading — elements 2–4 being D, E, F with G a hypothetical fifth — put the deviation plot in the F slot and left G reported as missing. The document now renders G from element 4 and asserts the length it depends on.

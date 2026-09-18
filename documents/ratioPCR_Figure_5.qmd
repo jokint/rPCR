@@ -1,0 +1,1220 @@
+---
+title: "ratioPCR Figure 5 — ratioPCR approaches dPCR accuracy, detects small fold differences, and defines the limits of quantification"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+The legend file supplied with the submission (`manuscript_figure_legends.txt`) carries only the figure title for the main figures; the panel-level description lives in the Results text. Both are quoted verbatim below and together form the specification this document has to reproduce.
+
+> **Figure 5: ratioPCR approaches dPCR accuracy, detects small fold differences, and defines the limits of quantification**
+
+> The proportion-based partition plot revealed five discrete proportion bands corresponding to single-isoform partitions and three statistically expected two-molecule combinations (1:2, 1:1, and 2:1 ratios; Figure 5B). Strikingly, the three intermediate bands were systematically displaced from their theoretically expected proportions of 0.33, 0.50, and 0.67, providing direct evidence that heteroduplex-driven ratio distortion operates within individual dPCR partitions and is therefore not unique to bulk multi-template PCR.
+>
+> Accuracy comparison across all three assays showed that rPCR achieved RSE values of 0.040, 0.071, and 0.014 for KIF13A, NUMA1, and SYNE1 respectively, compared with 0.010, 0.041, and 0.014 for dPCR (Figure 5C).
+>
+> \[...\] At 10 copies per reaction, the majority of replicates failed to produce a calculable result due to the absence of a fluorescence inflection point \[...\] At 100 copies per reaction, ratio estimation was unreliable and the two mixtures could not be distinguished. From 1,000 copies per reaction and above, the 40% and 60% mixtures were consistently and significantly discriminated, defining 1,000 copies per reaction as the practical lower limit of reliable rPCR quantification under these conditions (Figure 5D; Welch t-test: \*p \< 0.05, \*\*\*p \< 0.001).
+>
+> Across the full tested range (1:1 to 1:50), rPCR measured fold changes accurately tracked the expected values on a log-log scale (Figure 5E). Zooming into the small fold-change regime, Dunnett contrast analysis demonstrated that a 1:1.2 fold difference — corresponding to a shift of less than 5 percentage points in inclusion proportion — was reliably and significantly distinguished from the 1:1 reference (Figure 5F; \*p \< 0.05). Smaller differences of 1:1.1 were not significant under the tested conditions, defining the practical resolution limit near equimolarity.
+
+------------------------------------------------------------------------
+
+# Setup
+
+`Figure_settings.R` provides the package attachments, the project paths (`pp`, `fpath`), the palettes, the standards series and the `psave()` wrapper. Nothing it defines is redeclared here.
+
+Three objects — `basic_plot`, `theme_figure` and `simple_theme` — are reinstated below, guarded so that a definition exported by the `ratioPCR` package takes precedence.
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+library(dplyr)
+library(emmeans)
+
+ppath      <- file.path(pp, "documents", "extdata", "dPCR")
+outputPath <- fpath          # writes through outputPath
+
+# --- Session-leakage repair -------------------------------------------------
+theme_figure <- theme(
+  axis.text.y = element_text(size = 6, face = "plain"),
+  axis.text.x = element_text(size = 6),
+  panel.grid.major = element_blank(),
+  axis.title = element_text(face = "plain"),
+  axis.title.y = element_text(vjust = 0, size = 6),
+  axis.title.x = element_text(size = 8),
+  strip.placement = "outside",
+  strip.text.y = element_text(vjust = 0, size = 6),
+  plot.margin = margin(0, 0, 0, 0, "cm"))
+
+basic_plot <- ggplot() +
+  scale_colour_gradientn(colours = rpcr_col_probe) +
+  theme_rpcr() + theme_figure + theme(legend.position = "none")
+
+if (!exists("simple_theme")) simple_theme <- theme(
+  panel.background = element_rect(fill = 'transparent'),
+  plot.background = element_rect(fill = 'transparent', color = NA),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  legend.background = element_rect(fill = 'transparent'),
+  legend.box.background = element_rect(fill = 'transparent'),
+  strip.background = element_rect(fill = 'transparent'),
+  strip.text.x = element_blank(),
+  strip.text.y = element_blank()
+)
+
+# `theme_textless` is used by the dPCR scripts and is expected to be exported by
+# the `ratioPCR` package. Fallback only if the package does not provide it,
+# so that the document renders rather than aborting.
+if (!exists("theme_textless")) theme_textless <- theme(
+  axis.text = element_blank(),
+  axis.title = element_blank(),
+  axis.ticks = element_blank()
+)
+
+# --- Input data -------------------------------------------------------------
+
+# Panels A/B: partition-level RFU exports of the NUMA1 dPCR run
+# (crimson = exclusion channel, green = inclusion channel).
+excl <- read.csv(file.path(ppath, "rPCR_20250911_JK dPCR comparison_RFU_img1_crimson.csv"), skip = 1)
+incl <- read.csv(file.path(ppath, "rPCR_20250911_JK dPCR comparison_RFU_img1_green.csv"),   skip = 1)
+
+# Panel C: rPCR runs and dPCR summaries of the reference mixture series
+import_K <- rpcr_import(file.path(ppath, "rPCR_20250916_JK KIF13A dPCR comparison_20250918_125346.xlsx"))
+dPCR_K   <- read.csv(file.path(ppath, "rPCR_20250916 KIF13A_analysis_18_09_2025_17_22_21_UTC+02_00.csv"), skip = 1)
+import_N <- rpcr_import(file.path(pp, "documents", "extdata", "rPCR_NUMA1_compare.xlsx"))
+dPCR_N   <- read.csv(file.path(pp, "documents", "extdata", "dPCR_NUMA1_compare.csv"), sep = ";", header = FALSE)
+import_S <- rpcr_import(file.path(pp, "documents", "extdata", "rPCR_SYNE1_compare.xlsx"))
+dPCR_S   <- read.csv(file.path(ppath, "dPCR_SYNE1_compare.csv"), skip = 1)
+
+# Panels E/F: fold-resolution plate (TouchFluor export)
+import_fold <- rpcr_wrap(rpcr_readTF(file.path(pp, "documents", "extdata", "2026-04-14_170634.xls")))
+```
+
+------------------------------------------------------------------------
+
+# Panel A — dPCR partition signals of an equimolar NUMA1 mixture
+
+Digital PCR partitions the 1:1 NUMA1 mixture into single-molecule reactions, so the partition-level fluorescence directly resolves what bulk rPCR only sees as an average. Three populations are expected and are visible in both channels: signal-negative partitions, partitions carrying a single isoform, and an intermediate population carrying one molecule of each isoform. Each channel is normalised per well against its own single-isoform positive population and against the background cluster, and the crosstalk of the opposite channel is subtracted, so that a single-template partition sits at 1.0 in its own channel. The sum of both normalised channels then exceeds 1.0 for dual-template partitions — the partition-level signature of the elevated apparent amplification efficiency that heteroduplex formation produces within a single reaction volume.
+
+```{r}
+#| label: fig5-A-process
+
+target <- "NUMA1"
+
+excl <- excl[excl$Is.invalid == "0", ]
+incl <- incl[incl$Is.invalid == "0", ]
+data <- merge(excl, incl, by = c("Partition", "Well"))
+data$row <- substring(data$Well, 1, 1)
+data$col <- as.numeric(substring(data$Well, 2))
+data$bratioA <- data$RFU.y / data$RFU.x # old
+data$bratioB <- data$RFU.y / (data$RFU.y + data$RFU.x)  # old
+data$rratio <- data$RFU.y / data$RFU.x
+data$rprop <- data$RFU.y / (data$RFU.y + data$RFU.x)
+data$RFU.total <- data$RFU.y + data$RFU.x
+
+rm("excl", "incl")
+
+thres.x <- unique(data$Threshold.x)
+thres.y <- unique(data$Threshold.y)
+
+data <- rpcr_dcluster(data)
+data$index <- interaction(data[, grep("cl_", colnames(data))])
+
+### per well normalization
+data <- do.call(rbind, lapply(unique(data$Well), function(well) {
+  level <- 2
+  df <- data[data$Well == well, ]
+  bkg.x <- median(df[df$cluster == "b", ]$RFU.x)
+  bkg.y <- median(df[df$cluster == "b", ]$RFU.y)
+
+  topx.x <- median(df[df$cl_RFU.x == max(df$cl_RFU.x) & df$cl_RFU.y == 1, ]$RFU.x)
+  topx.y <- median(df[df$cl_RFU.x == max(df$cl_RFU.x) & df$cl_RFU.y == 1, ]$RFU.y)
+
+  topy.x <- median(df[df$cl_RFU.y == max(df$cl_RFU.y) & df$cl_RFU.x == 1, ]$RFU.x)
+  topy.y <- median(df[df$cl_RFU.y == max(df$cl_RFU.y) & df$cl_RFU.x == 1, ]$RFU.y)
+
+  if (!is.na(topx.x)) {
+  if ((1 %in% df$cl_RFU.x) & (topx.x / bkg.x > level)) {
+    df[df$cl_RFU.x == max(df$cl_RFU.x) & df$cl_RFU.y == 1 & df$cluster != "b", ]$cluster <- "x"
+    df[df$cl_RFU.x != max(df$cl_RFU.x) & df$cl_RFU.y == 1 & df$cl_RFU.x != 1 & df$cluster != "b", ]$cluster <- "x_rain"
+  }}
+
+  if (!is.na(topy.y)) {
+  if ((1 %in% df$cl_RFU.y) & (topy.y / bkg.y > level)) {
+    df[df$cl_RFU.y == max(df$cl_RFU.y) & df$cl_RFU.x == 1 & df$cluster != "b", ]$cluster <- "y"
+    df[df$cl_RFU.y != max(df$cl_RFU.y) & df$cl_RFU.x == 1 & df$cl_RFU.y != 1 & df$cluster != "b", ]$cluster <- "y_rain"
+  }
+  }
+  df %>% mutate(
+    nRFU.x = (RFU.x - bkg.x - (RFU.y - bkg.y) / (topy.y - bkg.y) * (topy.x - bkg.x)) / (topx.x - bkg.x),
+    nRFU.y = (RFU.y - bkg.y - (RFU.x - bkg.x) / (topx.x - bkg.x) * (topx.y - bkg.y)) / (topy.y - bkg.y),
+    nRFU.total = nRFU.x + nRFU.y)
+
+}))
+
+data$nratio <- data$nRFU.y / data$nRFU.x
+data$nprop <- data$nRFU.y / (data$nRFU.y + data$nRFU.x)
+
+# Well E6 is the 1:1 equimolar NUMA1 mixture.
+sel <- data[data$Well == "E6", ]
+
+sel[sel$nprop < 0, ]$nprop <- 0
+sel[sel$nprop > 1, ]$nprop <- 1
+
+sel1 <- sel %>% pivot_longer(
+  cols = starts_with("RFU"),
+  names_to = "signal",
+  values_to = "value",
+  values_drop_na = TRUE
+)
+sel1$signal <- factor(sel1$signal, levels = c("RFU.x", "RFU.y", "RFU.total"))
+
+sel2 <- sel %>% pivot_longer(
+  cols = starts_with("nRFU"),
+  names_to = "signal",
+  values_to = "value",
+  values_drop_na = TRUE
+)
+sel2$signal <- factor(sel2$signal, levels = c("nRFU.x", "nRFU.y", "nRFU.total"))
+```
+
+The plot list below is transplanted complete; the entries used for Figure 5A and 5B are selected afterwards, the remaining entries are the alternative partition views the source script also writes out.
+
+```{r}
+#| label: fig5-AB-plots
+
+plots2 <- list(
+### classical 1D scatterplot with raw values
+  basic_plot +
+  geom_point(data = sel1[sel1$signal != "RFU.total", ], aes(x = Partition, y = value), col = 1, alpha = 0.05, size = 0.05)  +
+  facet_grid(. ~ signal) +
+  expand_limits(x = 0, y = 0) +
+  simple_theme
+,
+### classical 1D scatterplot with raw values and prop colors
+basic_plot  +
+  geom_point(data = sel1[sel1$cluster == "b", ], aes(x = Partition, y = value), col = "grey", alpha = 0.05, size = 0.1)  +
+  geom_point(data = sel1[sel1$cluster != "b", ], aes(x = Partition, y = value, col = rprop), alpha = 0.05, size = 0.1)  +
+  facet_grid(. ~ signal) +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  expand_limits(x = 0, y = 0) +
+  simple_theme
+,
+### normalized 1D scatterplot
+basic_plot  +
+  geom_point(data = sel2[sel1$signal != "RFU.total", ], aes(x = Partition, y = value), col = 1, alpha = 0.05, size = 0.05)  +
+  facet_grid(. ~ signal) +
+  expand_limits(x = 0, y = 0) +
+  scale_color_manual(values = c(rpcr_col_probe[1], rpcr_col_probe[3], 1)) +
+  simple_theme
+,
+basic_plot  +
+  geom_point(data = sel2[sel2$cluster == "b", ], aes(x = Partition, y = value), col = "grey", alpha = 0.05, size = 0.05)  +
+  geom_point(data = sel2[sel2$cluster != "b", ], aes(x = Partition, y = value, col = rprop), alpha = 0.05, size = 0.05)  +
+  facet_grid(. ~ signal) +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  expand_limits(x = 0, y = 0) +
+  simple_theme
+,
+basic_plot  +
+  geom_point(data = sel2[sel2$cluster == "b", ], aes(x = Partition, y = value), col = "grey", alpha = 0.05, size = 0.05)  +
+  geom_point(data = sel2[sel2$cluster != "b", ], aes(x = Partition, y = value, col = nprop), alpha = 0.05, size = 0.05)  +
+  facet_grid(. ~ signal) +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  expand_limits(x = 0, y = 0) +
+  simple_theme
+,
+basic_plot  +
+  geom_point(data = sel, aes(x = RFU.x, y = RFU.y), col = 1, alpha = 0.05)  +
+  expand_limits(x = 0, y = 0) +
+  simple_theme,
+
+basic_plot  +
+  geom_point(data = sel[sel$cluster == "b", ], aes(x = nRFU.x, y = nRFU.y), col = 1, alpha = 0.01, size = 0.05)  +
+  geom_point(data = sel[sel$cluster != "b", ], aes(x = nRFU.x, y = nRFU.y, color = rprop), alpha = 0.2, size = 0.05)  +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  expand_limits(x = 0, y = 0) +
+  simple_theme
+,
+basic_plot  +
+  geom_point(data = sel[sel$cluster == "b", ], aes(x = rprop, y = RFU.total), col = 1, alpha = 0.01, size = 0.05)  +
+  geom_point(data = sel[sel$cluster != "b", ], aes(x = rprop, y = RFU.total, col = rprop), alpha = 0.2, size = 0.05)  +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  expand_limits(x = 0, y = 0) +
+  simple_theme
+,
+basic_plot  +
+  geom_point(data = sel[sel$cluster == "b", ], aes(x = nprop, y = nRFU.total), col = 1, alpha = 0.01, size = 0.05)  +
+  geom_point(data = sel[sel$cluster != "b", ], aes(x = nprop, y = nRFU.total, col = nprop), alpha = 0.2, size = 0.05)  +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  expand_limits(x = 0, y = 0) +
+  simple_theme
+,
+basic_plot  +
+  geom_point(data = sel[sel$cluster != "b", ], aes(x = log(rratio), y = RFU.total, col = rprop), alpha = 0.9, size = 0.05)  +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  simple_theme
+,
+basic_plot  +
+  geom_point(data = sel[sel$cluster == "b", ], aes(x = log(nratio), y = nRFU.total), col = 1, alpha = 0.05, size = 0.05)  +
+    geom_point(data = sel[sel$cluster != "b", ], aes(x = log(nratio), y = nRFU.total, col = nprop), alpha = 0.2, size = 0.05)  +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  simple_theme,
+basic_plot  +
+  geom_point(data = sel[sel$cluster != "b", ], aes(x = Partition, y = nprop, col = nprop), alpha = 0.2, size = 0.05) +
+  geom_hline(aes(yintercept = c(1/3, 0.5, 2/3)), linewidth = 0.5, linetype = "dotted") +
+  scale_color_gradientn(colors = rpcr_col_probe) +
+  simple_theme + theme_textless
+)
+```
+
+Figure 5A is composed of the raw one-dimensional partition plot (both channels and their sum) and its per-well normalised counterpart.
+
+```{r}
+#| label: fig5-A-raw
+#| fig-width: 6
+#| fig-height: 2.5
+
+plots2[[2]]
+```
+
+```{r}
+#| label: fig5-A-normalised
+#| fig-width: 6
+#| fig-height: 2.5
+
+plots2[[4]]
+```
+
+------------------------------------------------------------------------
+
+# Panel B — proportion-based partition plot
+
+Plotting the normalised inclusion proportion of each positive partition against the partition index resolves the composition of the partitions rather than their signal amplitude. At sub-saturating template input the only compositions with appreciable Poisson probability are one molecule of either isoform and the three two-molecule combinations, so five discrete bands are expected. Under ideal within-partition amplification the three intermediate bands would sit at 1:2, 1:1 and 2:1, i.e. at proportions of 0.33, 0.50 and 0.67 (dotted lines). The marginal densities on the right make the displacement of the observed bands from those values directly readable.
+
+```{r}
+#| label: fig5-B-bands
+#| fig-width: 3
+#| fig-height: 5
+
+plots2[[12]]
+```
+
+```{r}
+#| label: fig5-B-density
+#| fig-width: 3
+#| fig-height: 4
+
+p1 <- basic_plot + geom_density(data = sel, aes(y = nprop), bw = 0.015, fill = "grey") +   simple_theme + theme_textless
+p2 <- basic_plot + geom_density(data = sel[sel$nprop > 0.25 & sel$nprop < 0.75, ], aes(y = nprop), bw = 0.01, fill = "grey") +   simple_theme + theme_textless
+
+p1
+p2
+```
+
+------------------------------------------------------------------------
+
+# Panel C — accuracy of rPCR against dPCR across the three assays
+
+For each assay the same reference mixture series is measured twice: by rPCR, where the apparent proportion ψₐ is converted to a calibrated proportion ψ_c with the four-parameter model, and by dPCR, where the proportion is counted from positive partitions. Accuracy is summarised as the residual standard error (RSE) of the measured against the theoretical proportion, pooled over the whole 0–100% range, which makes the two methods directly comparable on the same scale. The RSE values are recomputed here and checked against the values quoted in the manuscript rather than being restated.
+
+Note on the input: the KIF13A block uses the `lbKIF13A` reference series of the dPCR-comparison plate; a first, immediately overwritten calibration of the `laKIF13A` series in the source script was dead code and has been dropped.
+
+```{r}
+#| label: fig5-C-kif13a
+
+target <- "KIF13A"
+
+### correlation
+dPCR <- dPCR_K
+import <- import_K
+
+df2 <- dPCR[dPCR$"Target..Name." == "Incl" & dPCR$"Sample.NTC.Control" != "NTC", c("Well", "Edited.fraction")]
+df2$row <- substring(df2$Well, 1, 1)
+df2$col <- as.numeric(substring(df2$Well, 2))
+seriesA <- c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1)
+seriesB <- seq(0, 1, 0.1)
+
+df2$tprop <- c(rep(seriesA, 4), rep(seriesB, 4))
+df2$cprop <- as.numeric(gsub("%", "", df2$"Edited.fraction")) / 100
+df2$delta <- df2$cprop - df2$tprop
+df2 <- df2[substr(df2$Well, 1, 1) %in% c("E", "F", "G", "H"), ]
+
+res <- rpcr_calibrate(import[import$target == "lbKIF13A", ], qual = "Cal", output = "details")
+df1 <- res$summary
+df1 <- rpcr_calibDetect(df1[df1$sample != "NTC", ])
+df1$delta <- df1$cprop - df1$tprop
+
+df1$method <- "rPCR"
+df2$method = "dPCR"
+colnames(df2)[colnames(df2) == "Well"] <- "well"
+
+df <- rbind(df1[, c("method", "well", "tprop", "cprop", "delta")], df2[, c("method", "well", "tprop", "cprop", "delta")])
+
+df1_mean <- df1 %>% group_by(tprop) %>% summarize(mean_cprop1 = mean(cprop, na.rm = TRUE))
+df2_mean <- df2 %>% group_by(tprop) %>% summarize(mean_cprop2 = mean(cprop, na.rm = TRUE))
+
+merged_means <- inner_join(df1_mean, df2_mean, by = "tprop")
+cor_all <- data.frame()
+
+cor_all <- rbind(cor_all, data.frame(target = "KIF13A", type = "RvsD", R = cor(merged_means$mean_cprop1, merged_means$mean_cprop2)))
+cor_all <- rbind(cor_all, data.frame(target = "KIF13A", type = "RvsT", R = cor(df1$tprop, df1$cprop)))
+cor_all <- rbind(cor_all, data.frame(target = "KIF13A", type = "DvsT", R = cor(df2$tprop, df2$cprop)))
+
+rse_rpcr_K <- sqrt(mean((df1$cprop - df1$tprop)^2, na.rm = TRUE))
+rse_dpcr_K <- sqrt(mean((df2$cprop - df2$tprop)^2, na.rm = TRUE))
+
+plot1_K <- ggplot() +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  stat_summary(data = df[df$method == "rPCR", ], aes(x = tprop, y = cprop), geom = "errorbar", fun.data = mean_se, linewidth = 0.1, width = 0.03) +
+  labs(x = "theoretical proportion", y = "calibrated proportion (rPCR)") +
+  theme_rpcr()
+
+plot2_K <- ggplot() +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  stat_summary(data = df[df$method == "dPCR", ], aes(x = tprop, y = cprop), geom = "errorbar", fun.data = mean_se, linewidth = 0.1, width = 0.03) +
+  labs(x = "theoretical proportion", y = "calculated proportion (dPCR)") +
+  theme_rpcr()
+```
+
+```{r}
+#| label: fig5-C-numa1
+
+#### NUMA1
+
+target <- "NUMA1"
+
+import <- import_N
+import <- import[import$sample != "NTC" & import$target == "cNUMA1", ]
+calib <- rpcr_calibrate(import, qual = "Cal2_")
+res <- rpcr_batchFit(import, calib = calib)
+res <- rpcr_calibDetect(res, qual = "Cal2_")
+
+df1 <- res
+df1 <- df1[grep("Cal2", df1$sample), ]
+df1$delta <- df1$cprop - df1$tprop
+
+dPCR <- dPCR_N
+tprop <- c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1)
+tprop <- c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)
+colnames(dPCR) <- c("well", "dil", tprop)
+
+df2 <- dPCR[dPCR$dil == "dilB", ] %>%
+  pivot_longer(
+    cols = as.character(tprop),
+    names_to = "tprop",
+    values_to = "cprop"
+  )
+df2$tprop <- as.numeric(df2$tprop)
+df2$delta <- df2$cprop - df2$tprop
+
+df1$method <- "rPCR"
+df2$method = "dPCR"
+
+df <- rbind(df1[, c("method", "well", "tprop", "cprop", "delta")], df2[, c("method", "well", "tprop", "cprop", "delta")])
+
+df1_mean <- df1 %>% group_by(tprop) %>% summarize(mean_cprop1 = mean(cprop, na.rm = TRUE))
+df2_mean <- df2 %>% group_by(tprop) %>% summarize(mean_cprop2 = mean(cprop, na.rm = TRUE))
+
+merged_means <- inner_join(df1_mean, df2_mean, by = "tprop")
+cor_all <- rbind(cor_all, data.frame(target = "NUMA1", type = "RvsD", R = cor(merged_means$mean_cprop1, merged_means$mean_cprop2)))
+cor_all <- rbind(cor_all, data.frame(target = "NUMA1", type = "RvsT", R = cor(df1$tprop, df1$cprop)))
+cor_all <- rbind(cor_all, data.frame(target = "NUMA1", type = "DvsT", R = cor(df2$tprop, df2$cprop)))
+
+rse_rpcr_N <- sqrt(mean((df1$cprop - df1$tprop)^2, na.rm = TRUE))
+rse_dpcr_N <- sqrt(mean((df2$cprop - df2$tprop)^2, na.rm = TRUE))
+
+plot1_N <- ggplot() +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  stat_summary(data = df[df$method == "rPCR", ], aes(x = tprop, y = cprop), geom = "errorbar", fun.data = mean_se, linewidth = 0.1, width = 0.03) +
+  labs(x = "theoretical proportion", y = "calibrated proportion (rPCR)") +
+  theme_rpcr()
+
+plot2_N <- ggplot() +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  stat_summary(data = df[df$method == "dPCR", ], aes(x = tprop, y = cprop), geom = "errorbar", fun.data = mean_se, linewidth = 0.1, width = 0.03) +
+  labs(x = "theoretical proportion", y = "calculated proportion (dPCR)") +
+  theme_rpcr()
+```
+
+```{r}
+#| label: fig5-C-syne1
+
+#### SYNE1
+
+target <- "SYNE1"
+
+import <- import_S
+dPCR <- dPCR_S
+
+refs <-  c("Cal10", "Cal40", "Cal60", "Cal90")
+calib <- rpcr_calibrate(import[import$sample %in% refs, ])
+res <- rpcr_batchFit(import, calib = calib)
+res <- rpcr_calibDetect(res)
+
+### correlation
+df2 <- dPCR[grepl("Cal", dPCR$Sample.NTC.Control) & grepl("excl", dPCR$"Target..Name.") & dPCR$"Sample.NTC.Control" != "NTC", c("Well", "Edited.fraction")]
+df2$row <- substring(df2$Well, 1, 1)
+df2$col <- as.numeric(substring(df2$Well, 2))
+
+df2$tprop <- rep(seq(0, 1, 0.1), 4)[1:43]
+df2$cprop <- 1 - as.numeric(gsub("%", "", df2$"Edited.fraction")) / 100
+df2$delta <- df2$cprop - df2$tprop
+df2 <- na.omit(df2)
+
+dodge <- position_dodge(width = 0.9)
+df1 <- res
+df1 <- df1[grep("Cal", df1$sample), ]
+df1$delta <- df1$cprop - df1$tprop
+
+df1$method <- "rPCR"
+df2$method = "dPCR"
+colnames(df2)[colnames(df2) == "Well"] <- "well"
+
+df <- rbind(df1[, c("method", "well", "tprop", "cprop", "delta")], df2[, c("method", "well", "tprop", "cprop", "delta")])
+
+df1_mean <- df1 %>% group_by(tprop) %>% summarize(mean_cprop1 = mean(cprop, na.rm = TRUE))
+df2_mean <- df2 %>% group_by(tprop) %>% summarize(mean_cprop2 = mean(cprop, na.rm = TRUE))
+
+merged_means <- inner_join(df1_mean, df2_mean, by = "tprop")
+
+cor_all <- rbind(cor_all, data.frame(target = "SYNE1", type = "RvsD", R = cor(merged_means$mean_cprop1, merged_means$mean_cprop2)))
+cor_all <- rbind(cor_all, data.frame(target = "SYNE1", type = "RvsT", R = cor(df1$tprop, df1$cprop)))
+cor_all <- rbind(cor_all, data.frame(target = "SYNE1", type = "DvsT", R = cor(df2$tprop, df2$cprop)))
+
+rse_rpcr_S <- sqrt(mean((df1$cprop - df1$tprop)^2, na.rm = TRUE))
+rse_dpcr_S <- sqrt(mean((df2$cprop - df2$tprop)^2, na.rm = TRUE))
+
+plot1_S <- ggplot() +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  stat_summary(data = df[df$method == "rPCR", ], aes(x = tprop, y = cprop), geom = "errorbar", fun.data = mean_se, linewidth = 0.1, width = 0.03) +
+  labs(x = "theoretical proportion", y = "calibrated proportion (rPCR)") +
+  theme_rpcr()
+
+plot2_S <- ggplot() +
+  geom_line(data = data.frame(x = c(0, 1), y = c(0, 1)), aes(x = x, y = y), linetype = "dotted", linewidth = 0.5, col = "grey") +
+  stat_summary(data = df[df$method == "dPCR", ], aes(x = tprop, y = cprop), geom = "errorbar", fun.data = mean_se, linewidth = 0.1, width = 0.03) +
+  labs(x = "theoretical proportion", y = "calculated proportion (dPCR)") +
+  theme_rpcr()
+```
+
+```{r}
+#| label: fig5-C-panel
+#| fig-width: 4.5
+#| fig-height: 2.8
+
+# 1. Combine all plots into a single flat list using the + operator
+panelE <- (plot1_K ) +
+  (plot1_N ) +
+  (plot1_S ) +
+  (plot2_K ) +
+  (plot2_N ) +
+  (plot2_S ) +
+  # 2. Control the global layout directly
+  plot_layout(
+    ncol = 3,           # Force a 3-column grid
+    widths = c(1, 1, 1) # Force all columns to have equal width allocations
+  )
+
+panelE
+```
+
+RSE recomputed from the data in this document, against the values quoted in the Results text. The comparison is printed rather than assumed; any disagreement is reported explicitly.
+
+```{r}
+#| label: fig5-C-rse
+
+rse_summary <- data.frame(
+  target = rep(c("KIF13A", "NUMA1", "SYNE1"), each = 2),
+  method = rep(c("rPCR", "dPCR"), 3),
+  RSE    = c(rse_rpcr_K, rse_dpcr_K,
+             rse_rpcr_N, rse_dpcr_N,
+             rse_rpcr_S, rse_dpcr_S)
+)
+
+# Values as reported in the Results text of ISCIENCE-D-26-02393_R2.
+rse_manuscript <- data.frame(
+  target = rep(c("KIF13A", "NUMA1", "SYNE1"), each = 2),
+  method = rep(c("rPCR", "dPCR"), 3),
+  RSE_manuscript = c(0.040, 0.010, 0.071, 0.041, 0.014, 0.014)
+)
+
+rse_check <- merge(rse_summary, rse_manuscript, by = c("target", "method"))
+rse_check$difference <- rse_check$RSE - rse_check$RSE_manuscript
+rse_check$agrees <- abs(rse_check$difference) < 0.0005   # rounding to 3 decimals
+
+knitr::kable(rse_check[order(rse_check$target, rse_check$method), ],
+             digits = 4, row.names = FALSE,
+             caption = "Recomputed RSE against the values quoted in the manuscript")
+
+if (all(rse_check$agrees)) {
+  cat("All six recomputed RSE values reproduce the manuscript values to three decimals.\n")
+} else {
+  cat("DISAGREEMENT with the manuscript for:\n")
+  print(rse_check[!rse_check$agrees, c("target", "method", "RSE", "RSE_manuscript", "difference")])
+}
+
+cor_all
+```
+
+------------------------------------------------------------------------
+
+# Panel D — lower limit of quantification from the copy-number series
+
+The practical lower limit of rPCR is set by the template input at which two mixtures differing by a known, small amount can still be told apart. A KIF13A dilution series spanning 10 to 10⁷ total copies per reaction was measured for a 40% and a 60% inclusion mixture. Below the limit the failure is not a bias but an absence of signal: without a fluorescence inflection point no ratio can be computed at all, so a condition is flagged unreliable when fewer than three of four replicates return a value, and those points are drawn as crosses instead of bars. Discrimination is tested per copy number with a Welch t-test on the logit-transformed calibrated proportion, which stabilises the variance of a bounded proportion near the middle of its range.
+
+```{r}
+#| label: fig5-D
+#| fig-width: 4
+#| fig-height: 3.5
+
+# ── 1. Import and prepare data ────────────────────────────────────────────────
+
+import <- import_K
+
+# Assign copy numbers to dilution series
+# 8 concentration levels (10^7 down to 10^1) plus 0, each with 2 samples (Dil40, Dil60)
+# 4 replicates per condition → total 8 × 2 × 4 = 64 rows
+conc <- rep(c(10^(7:1), 0), times = 4, length.out = NA, each = 2)
+
+importT <- rbind(
+  import[grep("Dil", import$sample), ],   # dilution series (40% and 60% samples)
+  import[import$target == "laKIF13A", ]   # calibration reference samples
+)
+importT$target <- "KIF13A"
+
+# ── 2. Calibrate ──────────────────────────────────────────────────────────────
+
+res <- rpcr_calibrate(
+  importT,
+  signal  = "delta",
+  rtype   = "ip",
+  roff    = 5,
+  model   = "single",
+  output  = "details",
+  qual    = "Cal"
+)$summary
+
+# Keep only dilution series samples and assign copy numbers
+res <- res %>%
+  filter(grepl("Dil", sample)) %>%
+  mutate(conc = conc[seq_len(n())])   # assign conc vector to rows in order
+
+# ── 3. Flag reliable vs unreliable measurements ───────────────────────────────
+# A measurement is unreliable if fewer than 3 of 4 replicates produced
+# a calculable result (i.e. cprop is NA due to missing inflection point)
+
+res <- res %>%
+  group_by(conc, sample) %>%
+  mutate(
+    n_total = n(),
+    n_valid = sum(!is.na(cprop)),
+    reliable = n_valid >= 3
+  ) %>%
+  ungroup()
+
+# Report reliability by condition
+cat("Reliability summary:\n")
+res %>%
+  group_by(conc, sample) %>%
+  summarise(n_valid = first(n_valid),
+            n_total = first(n_total),
+            reliable = first(reliable),
+            .groups = "drop") %>%
+  print()
+
+# ── 4. Statistical test — Welch t-test at each copy number ───────────────────
+# Compare log-odds of cprop between Dil40 and Dil60
+# Only for reliable concentrations (>= 3 valid replicates per group)
+
+reliable_concs <- res %>%
+  group_by(conc) %>%
+  summarise(both_reliable = all(reliable), .groups = "drop") %>%
+  filter(both_reliable, conc > 0) %>%
+  pull(conc)
+
+stat_test <- lapply(reliable_concs, function(c) {
+  tdata <- res %>%
+    filter(conc == c, !is.na(cprop)) %>%
+    mutate(logit_cprop = log10(cprop / (1 - cprop)))
+
+  g40 <- tdata$logit_cprop[tdata$sample == "Dil40"]
+  g60 <- tdata$logit_cprop[tdata$sample == "Dil60"]
+
+  if (length(g40) < 2 | length(g60) < 2) return(NULL)
+
+  tt <- t.test(g40, g60, var.equal = FALSE)
+  data.frame(
+    conc    = c,
+    t_stat  = tt$statistic,
+    p_value = tt$p.value,
+    sig     = ifelse(tt$p.value < 0.001, "***",
+                     ifelse(tt$p.value < 0.01,  "**",
+                            ifelse(tt$p.value < 0.05,  "*", "ns")))
+  )
+})
+
+stat_tbl <- do.call(rbind, stat_test)
+cat("\nWelch t-test results (Dil40 vs Dil60 per copy number):\n")
+print(stat_tbl)
+
+# ── 5. Separate reliable and unreliable subsets for plotting ──────────────────
+
+res_reliable   <- res %>% filter(reliable, conc > 0)
+res_unreliable <- res %>% filter(!reliable, conc > 0, !is.na(cprop))
+
+# ── 6. x-axis labels ──────────────────────────────────────────────────────────
+
+conc_levels <- as.character(sort(unique(res$conc[res$conc > 0])))
+conc_labels <- c(
+  "10"   = "10",
+  "100"  = "100",
+  "1000" = "1,000",
+  "1e+04" = "10,000",
+  "1e+05" = "100,000",
+  "1e+06" = "1,000,000",
+  "1e+07" = "10,000,000"
+)
+
+# ── 7. Main plot — calibrated proportion ──────────────────────────────────────
+
+p_cprop <- ggplot() +
+
+  # Bars — reliable data only
+  stat_summary(
+    data     = res_reliable,
+    aes(x = factor(conc), y = cprop, fill = sample),
+    geom     = "bar",
+    fun      = mean,
+    position = position_dodge(width = 0.9),
+    width    = 0.8,
+    colour   = "black",
+    linewidth = 0.3
+  ) +
+
+  # Error bars — reliable data only
+  stat_summary(
+    data     = res_reliable,
+    aes(x = factor(conc), y = cprop, group = sample),
+    geom      = "errorbar",
+    fun.data  = mean_se,
+    position  = position_dodge(width = 0.9),
+    width     = 0.25,
+    linewidth = 0.4
+  ) +
+
+  # Cross symbols — unreliable single observations (10 copies)
+  geom_point(
+    data     = res_unreliable,
+    aes(x = factor(conc), y = cprop, colour = sample),
+    position = position_dodge(width = 0.9),
+    shape    = 4,     # cross = unreliable
+    size     = 2,
+    stroke   = 0.8
+  ) +
+
+  # Dashed vertical line marking reliability threshold
+  geom_vline(
+    xintercept = 1.5,   # between 10 and 100 copies on factor axis
+    linetype   = "dashed",
+    colour     = "grey50",
+    linewidth  = 0.4
+  ) +
+
+  # Significance annotations from t-test
+  geom_text(
+    data = stat_tbl %>%
+      filter(sig != "ns") %>%
+      mutate(conc_f = factor(conc)),
+    aes(x = conc_f, y = 0.72, label = sig),
+    size = 2.5,
+    inherit.aes = FALSE
+  ) +
+
+  scale_x_discrete(
+    limits = conc_levels,
+    labels = conc_labels
+  ) +
+  scale_fill_manual(
+    values = c("Dil40" = "grey75", "Dil60" = "grey30"),
+    labels = c("Dil40" = "40% inclusion", "Dil60" = "60% inclusion")
+  ) +
+  scale_colour_manual(
+    values = c("Dil40" = "grey75", "Dil60" = "grey30"),
+    guide  = "none"
+  ) +
+  labs(
+    x    = "Total template copies per reaction",
+    y    = "Calibrated inclusion proportion",
+    fill = NULL
+  ) +
+  theme_rpcr() +
+  theme(
+    axis.text.x  = element_text(angle = 45, hjust = 1),
+    legend.position = "top"
+  )
+
+p_cprop
+```
+
+The source script additionally produces the same series expressed as a fold change relative to the 40% mean, which is written out alongside the panel.
+
+```{r}
+#| label: fig5-D-foldchange
+#| fig-width: 4
+#| fig-height: 3.5
+
+# ── 8. Alternative plot — fold change relative to Dil40 mean ─────────────────
+# Normalise each value to the mean of Dil40 at the same concentration
+
+res_fc <- res %>%
+  filter(conc > 0, !is.na(cprop)) %>%
+  group_by(conc) %>%
+  mutate(
+    ref_mean = mean(cprop[sample == "Dil40"], na.rm = TRUE),
+    fold_change = cprop / ref_mean
+  ) %>%
+  ungroup()
+
+res_fc_reliable   <- res_fc %>% filter(reliable)
+res_fc_unreliable <- res_fc %>% filter(!reliable)
+
+p_fc <- ggplot() +
+
+  geom_hline(yintercept = 1, linetype = "dotted",
+             colour = "grey50", linewidth = 0.4) +
+
+  stat_summary(
+    data     = res_fc_reliable,
+    aes(x = factor(conc), y = fold_change, fill = sample),
+    geom     = "bar",
+    fun      = mean,
+    position = position_dodge(width = 0.9),
+    width    = 0.8,
+    colour   = "black",
+    linewidth = 0.3
+  ) +
+  stat_summary(
+    data     = res_fc_reliable,
+    aes(x = factor(conc), y = fold_change, group = sample),
+    geom      = "errorbar",
+    fun.data  = mean_se,
+    position  = position_dodge(width = 0.9),
+    width     = 0.25,
+    linewidth = 0.4
+  ) +
+  geom_point(
+    data     = res_fc_unreliable,
+    aes(x = factor(conc), y = fold_change, colour = sample),
+    position = position_dodge(width = 0.9),
+    shape    = 4,
+    size     = 2,
+    stroke   = 0.8
+  ) +
+  geom_vline(
+    xintercept = 1.5,
+    linetype   = "dashed",
+    colour     = "grey50",
+    linewidth  = 0.4
+  ) +
+  scale_x_discrete(limits = conc_levels, labels = conc_labels) +
+  scale_fill_manual(
+    values = c("Dil40" = "grey75", "Dil60" = "grey30"),
+    labels = c("Dil40" = "40% inclusion", "Dil60" = "60% inclusion")
+  ) +
+  scale_colour_manual(
+    values = c("Dil40" = "grey75", "Dil60" = "grey30"),
+    guide  = "none"
+  ) +
+  labs(
+    x    = "Total template copies per reaction",
+    y    = "Fold change relative to 40% mean",
+    fill = NULL
+  ) +
+  theme_rpcr() +
+  theme(
+    axis.text.x     = element_text(angle = 45, hjust = 1),
+    legend.position = "top"
+  )
+
+p_fc
+```
+
+------------------------------------------------------------------------
+
+# Panels E and F — fold-change resolution against a 1:1 reference
+
+Panels E and F come from a single plate on which a series of defined inclusion:exclusion ratios (1:1 up to 1:50) is measured at eight template inputs. Rows 1e9 serve as the calibration standards; the analysis is run at 1e8 copies per reaction, comfortably above the lower quantification limit established in panel D. Calibrated proportions are converted to odds (ψ_c/(1−ψ_c)), i.e. to the fold change itself, and analysed on the log₂ scale so that the error structure is symmetric and a linear model is appropriate. Resolution near equimolarity is then tested with Dunnett contrasts of every fold level against the 1:1 reference, which controls the family-wise error rate across the whole set of comparisons at once.
+
+```{r}
+#| label: fig5-EF-model
+
+# ── 1. Import and parse metadata ──────────────────────────────────────────────
+
+import <- import_fold
+
+# Map plate rows (pairs) to template concentrations (copies/reaction)
+# Rows A-B = 1e9, C-D = 1e8, ..., O-P = 1e2
+row_to_conc <- c(
+  A = 1e9, B = 1e9,
+  C = 1e8, D = 1e8,
+  E = 1e7, F = 1e7,
+  G = 1e6, H = 1e6,
+  I = 1e5, J = 1e5,
+  K = 1e4, L = 1e4,
+  M = 1e3, N = 1e3,
+  O = 1e2, P = 1e2
+)
+
+# Map plate columns (pairs) to expected fold changes vs 1:1
+# Columns 1-2 = fold 50, ..., 21-22 = fold 1 (equimolar), 23-24 = fold 0 (pure exclusion)
+col_to_fold <- c(
+  `1`  = 50,  `2`  = 50,
+  `3`  = 20,  `4`  = 20,
+  `5`  = 10,  `6`  = 10,
+  `7`  = 5,   `8`  = 5,
+  `9`  = 2,   `10` = 2,
+  `11` = 1.5, `12` = 1.5,
+  `13` = 1.4, `14` = 1.4,
+  `15` = 1.3, `16` = 1.3,
+  `17` = 1.2, `18` = 1.2,
+  `19` = 1.1, `20` = 1.1,
+  `21` = 1,   `22` = 1,
+  `23` = 0,   `24` = 0
+)
+
+results <- import %>%
+  mutate(
+    col      = as.integer(sub("^[A-Z]+", "", well)),
+    row      = sub("[0-9]+$", "", well),
+    conc     = row_to_conc[row],
+    fold_num = col_to_fold[as.character(col)]
+  )
+
+# ── 2. Calibration ────────────────────────────────────────────────────────────
+# Use highest concentration (1e9) as calibration standards
+# Convert fold_num to inclusion proportion for sample naming:
+# fold_num = inclusion/exclusion ratio, so proportion = fold_num / (fold_num + 1)
+# e.g. fold 1 → 50%, fold 2 → 66.7%, fold 50 → 98%
+# fold_num = 0 → pure exclusion → proportion = 0 (Cal0)
+
+results <- results %>%
+  mutate(
+    sample = case_when(
+      conc == 1e9 & fold_num == 0 ~ "Cal0",
+      conc == 1e9 & fold_num >  0 ~ paste0("Cal",
+                                           round(100 * fold_num / (fold_num + 1), 1)),
+      TRUE ~ sample
+    )
+  )
+
+# Verify calibration sample names
+cat("Calibration sample names:\n")
+print(sort(unique(results$sample[results$conc == 1e9])))
+
+# Fit calibration model and apply to all samples
+calib   <- rpcr_calibrate(results, output = "details")
+results2 <- calib$summary
+
+# ── 3. Compute fold-change metrics ───────────────────────────────────────────
+# Clamp calibrated proportions away from 0 and 1 before logit transform
+# to avoid infinite log2Fc values
+
+eps <- 1e-6
+
+results2 <- results2 %>%
+  mutate(
+    cprop_clamped = pmin(pmax(cprop, eps), 1 - eps),
+    Fc            = cprop_clamped / (1 - cprop_clamped),   # odds = fold change
+    log2Fc        = log2(Fc)
+  )
+
+# ── 4. Subset to analysis concentration ──────────────────────────────────────
+# Use 1e8 copies/reaction — well above lower quantification limit
+# Exclude fold_num = 0 (pure exclusion, no meaningful fold change vs 1:1)
+
+res <- results2 %>%
+  filter(
+    conc == 1e8,
+    !is.na(fold_num),
+    fold_num > 0,
+    is.finite(log2Fc)
+  ) %>%
+  mutate(
+    # Ordered factor with 1:1 as reference level (first)
+    fold = factor(
+      as.character(fold_num),
+      levels = c("1", "1.1", "1.2", "1.3", "1.4", "1.5",
+                 "2", "5", "10", "20", "50")
+    )
+  )
+
+# Check sample sizes per fold level
+cat("\nSample sizes per fold level:\n")
+print(table(res$fold))
+
+# ── 5. Linear model on log2 fold-change scale ─────────────────────────────────
+
+fit <- lm(log2Fc ~ fold, data = res)
+
+cat("\nANOVA table:\n")
+print(anova(fit))
+
+# ── 6. Dunnett contrasts vs 1:1 reference ────────────────────────────────────
+# ref = 1 means the FIRST factor level, which is fold = "1" (equimolar 1:1)
+# Dunnett correction controls family-wise error rate across all comparisons
+
+emm <- emmeans(fit, ~ fold)
+
+dunnett_res <- contrast(
+  emm,
+  method = "trt.vs.ctrl",
+  ref    = 1,            # first level = fold "1" = equimolar reference
+  adjust = "dunnett"
+)
+
+dunnett_tbl <- as.data.frame(summary(dunnett_res, infer = c(TRUE, TRUE))) %>%
+  mutate(
+    # Back-transform from log2 to fold-change scale
+    FC_est  = 2^estimate,
+    FC_low  = 2^lower.CL,
+    FC_high = 2^upper.CL,
+    significant = p.value < 0.05,
+    # Clean up contrast labels: "fold1.2 - fold1" → "1.2"
+    fold_tested = sub("^fold", "", sub(" - fold1$", "", contrast))
+  ) %>%
+  mutate(
+    fold_tested = factor(
+      fold_tested,
+      levels = c("1.1", "1.2", "1.3", "1.4", "1.5",
+                 "2", "5", "10", "20", "50")
+    )
+  )
+
+cat("\nDunnett contrast results:\n")
+print(dunnett_tbl[, c("fold_tested", "estimate", "lower.CL", "upper.CL",
+                      "p.value", "FC_est", "significant")])
+
+# ── 7. Descriptive summary ───────────────────────────────────────────────────
+
+summary_tbl <- res %>%
+  group_by(fold) %>%
+  summarise(
+    n           = n(),
+    mean_log2Fc = mean(log2Fc, na.rm = TRUE),
+    sd_log2Fc   = sd(log2Fc,   na.rm = TRUE),
+    se_log2Fc   = sd_log2Fc / sqrt(n),
+    mean_Fc     = mean(Fc,     na.rm = TRUE),
+    sd_Fc       = sd(Fc,       na.rm = TRUE),
+    se_Fc       = sd_Fc / sqrt(n),
+    .groups     = "drop"
+  )
+
+cat("\nDescriptive summary per fold level:\n")
+print(summary_tbl)
+```
+
+## Panel E — measured against expected fold change
+
+```{r}
+#| label: fig5-E
+#| fig-width: 6
+#| fig-height: 4
+
+# ── Plot A: measured vs expected fold change (full series, log-log) ──
+pA <- ggplot(res, aes(x = fold_num, y = Fc)) +
+  geom_abline(slope = 1, intercept = 0,
+              linetype = "dotted", linewidth = 0.5, colour = "grey") +
+  geom_point(
+    position = position_jitter(width = 0.02, height = 0),
+    alpha = 0.6, size = 0.8
+  ) +
+  stat_summary(fun = mean, geom = "point",
+               size = 2, shape = 18, colour = "black") +
+  stat_summary(fun.data = mean_se, geom = "errorbar",
+               width = 0.05, linewidth = 0.4) +
+  scale_x_log10(breaks = c(1, 1.1, 1.2, 1.3, 1.4, 1.5, 2, 5, 10, 20, 50),
+                labels = c("1", "1.1", "1.2", "1.3", "1.4", "1.5",
+                           "2", "5", "10", "20", "50")) +
+  scale_y_log10() +
+  labs(
+    x = "Expected fold change vs 1:1",
+    y = "Measured rPCR fold change"
+  ) +
+  theme_rpcr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+pA
+```
+
+## Panel F — Dunnett contrasts in the small fold-change regime
+
+The two intermediate views (log₂ scale and back-transformed full series) are kept because the source script produces and writes both; the submitted panel is the zoom onto fold changes below 2.
+
+```{r}
+#| label: fig5-F
+#| fig-width: 6
+#| fig-height: 4
+
+# ── Plot B: Dunnett contrasts — log2 scale ──
+pB <- ggplot(dunnett_tbl, aes(x = fold_tested, y = estimate)) +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             linewidth = 0.3, colour = "grey50") +
+  geom_pointrange(aes(ymin = lower.CL, ymax = upper.CL),
+                  size = 0.3) +
+  geom_text(
+    aes(label = ifelse(significant, "*", "ns"),
+        y     = upper.CL + 0.05),
+    size = 2.5
+  ) +
+  labs(
+    x = "Expected fold change vs 1:1",
+    y = "Estimated log\u2082 fold change vs 1:1 (± 95% CI)"
+  ) +
+  theme_rpcr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# ── Plot C: Dunnett contrasts — back-transformed fold change scale ──
+pC <- ggplot(dunnett_tbl, aes(x = fold_tested, y = FC_est)) +
+  geom_hline(yintercept = 1, linetype = "dashed",
+             linewidth = 0.3, colour = "grey50") +
+  geom_pointrange(aes(ymin = FC_low, ymax = FC_high),
+                  size = 0.3) +
+  geom_text(
+    aes(label = ifelse(significant, "*", "ns"),
+        y     = FC_high * 1.08),
+    size = 2.5
+  ) +
+  labs(
+    x = "Expected fold change vs 1:1",
+    y = "Estimated fold change vs 1:1 (± 95% CI)"
+  ) +
+  theme_rpcr() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# ── Plot D: Dunnett contrasts — zoomed to small fold changes (< 2) ──
+pD <- dunnett_tbl %>%
+  filter(as.numeric(as.character(fold_tested)) < 2) %>%
+  ggplot(aes(x = fold_tested, y = FC_est)) +
+  geom_hline(yintercept = 1, linetype = "dashed",
+             linewidth = 0.3, colour = "grey50") +
+  geom_pointrange(aes(ymin = FC_low, ymax = FC_high),
+                  size = 0.3) +
+  geom_text(
+    aes(label = ifelse(significant, "*", "ns"),
+        y     = FC_high * 1.05),
+    size = 2.5
+  ) +
+  labs(
+    x = "Expected fold change vs 1:1",
+    y = "Estimated fold change vs 1:1 (± 95% CI)"
+  ) +
+  scale_x_discrete(limits = c("1.1", "1.2", "1.3", "1.4", "1.5")) +
+  theme_rpcr()
+
+pB
+pC
+pD
+```
+
+The resolution limit quoted in the Results text is read off the same Dunnett table rather than restated.
+
+```{r}
+#| label: fig5-F-resolution
+
+small <- dunnett_tbl %>%
+  filter(as.numeric(as.character(fold_tested)) < 2) %>%
+  arrange(as.numeric(as.character(fold_tested)))
+
+knitr::kable(small[, c("fold_tested", "FC_est", "FC_low", "FC_high",
+                       "p.value", "significant")],
+             digits = 4, row.names = FALSE,
+             caption = "Dunnett contrasts against the 1:1 reference, small fold-change regime")
+
+resolved <- small$fold_tested[small$significant]
+cat("Fold levels resolved from 1:1 at p < 0.05 (Dunnett-adjusted): ",
+    if (length(resolved)) paste(as.character(resolved), collapse = ", ") else "none", "\n", sep = "")
+cat("Smallest resolved fold difference: ",
+    if (length(resolved)) as.character(resolved[1]) else "none", "\n", sep = "")
+```
+
+# Save figure
+
+Panel-level outputs are written into `documents/figures` under the `ratioPCR_figure_<figure><panel>` convention, which also repairs the stale panel letters discussed above: the accuracy comparison is panel C, the copy-number series panel D. Panels A and B were assembled outside R from the eight partition plots, and the alternative views and model diagnostics are not themselves panels, so those go to `documents/figures/components` under their working names. All writes go through `psave()` or `file.path(fpath, ...)`.
+
+```{r}
+#| label: save-figures
+
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+
+target <- "NUMA1"
+
+# --- Panels A and B ---------------------------------------------------------
+psave(paste0("dPCR_", target, "_B_1"), plots2[[2]],  path = cpath, width = 5, height = 3, dpi = 600)
+psave(paste0("dPCR_", target, "_B_2"), plots2[[4]],  path = cpath, width = 5, height = 3, dpi = 600)
+psave(paste0("dPCR_", target, "_B_3"), plots2[[7]],  path = cpath, width = 3, height = 3, dpi = 600)
+psave(paste0("dPCR_", target, "_B_4"), plots2[[9]],  path = cpath, width = 3, height = 3, dpi = 600)
+psave(paste0("dPCR_", target, "_B_5"), plots2[[11]], path = cpath, width = 3, height = 3, dpi = 600)
+psave(paste0("dPCR_", target, "_B_6"), plots2[[12]], path = cpath, width = 3, height = 5, dpi = 600)
+psave(paste0("dPCR_", target, "_C_1"), p1, path = cpath, width = 1.5, height = 4, dpi = 600)
+psave(paste0("dPCR_", target, "_C_2"), p2, path = cpath, width = 1.5, height = 4, dpi = 600)
+
+# --- Panel C ----------------------------------------------------------------
+psave("ratioPCR_figure_5C", panelE, width = 11.4, height = 7, dpi = 600)
+
+# --- Panel D ----------------------------------------------------------------
+psave("ratioPCR_figure_5D",   p_cprop, width = 5.5, height = 4.5, dpi = 600)
+psave("Figure_5D_foldchange", p_fc, path = cpath, width = 5.5, height = 4.5, dpi = 600)
+
+# --- Panels E and F ---------------------------------------------------------
+ggsave(file.path(fpath, "ratioPCR_figure_5E.pdf"),
+       pA, width = 8, height = 5, dpi = 1000)
+ggsave(file.path(cpath, "fold_series_dunnett_log2.pdf"),
+       pB, width = 8, height = 5, dpi = 1000)
+ggsave(file.path(cpath, "fold_series_dunnett_FC.pdf"),
+       pC, width = 8, height = 5)
+ggsave(file.path(fpath, "ratioPCR_figure_5F.pdf"),
+       pD, width = 6, height = 5)
+
+# Model diagnostics for the log2 fold-change model (relocated here from the
+# analysis chunk so that all file writes happen in one place).
+pdf(file.path(cpath, "fold_series_model_diagnostics.pdf"),
+    width = 7, height = 7)
+par(mfrow = c(2, 2))
+plot(fit)
+dev.off()
+
+write.csv(summary_tbl,
+          file.path(fpath, "ratioPCR_figure_5E_summary.csv"),
+          row.names = FALSE)
+
+write.csv(dunnett_tbl,
+          file.path(fpath, "ratioPCR_figure_5F_dunnett.csv"),
+          row.names = FALSE)
+
+cat("Figure 5 outputs written to:", fpath, "\n")
+```

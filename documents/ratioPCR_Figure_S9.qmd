@@ -1,0 +1,435 @@
+---
+title: "ratioPCR Figure S9 — Calibration quality improves with increasing number of reference standards and stabilises above seven"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+<!-- ============================================================= -->
+<!-- ratioPCR_Figure_S9.qmd                                         -->
+<!-- Self-contained rebuild of Supplementary Figure S9              -->
+<!-- (ISCIENCE-D-26-02393_R2).                                      -->
+<!-- The combination sweep is expensive; it is cached in            -->
+<!-- documents/extdata/RefNum_calculation.rds and only recomputed   -->
+<!-- when RPCR_RECALCULATE=TRUE.                                    -->
+<!-- ============================================================= -->
+
+# Figure legend
+
+> **Supplementary Figure S9: Calibration quality improves with increasing
+> number of reference standards and stabilises above seven**
+>
+> Violin plots showing the distribution of root mean square error (RMSE) of
+> calibrated inclusion proportions across all possible combinations of 4 to 11
+> reference standards drawn from an evenly spaced series (0% to 100% inclusion
+> in 10% steps) using the KIF13A assay. For each combination, calibration
+> parameters were estimated from one reference series and RMSE was evaluated on
+> a held-out cross-validation series. The width of each violin reflects the
+> density of RMSE values across all tested combinations at that standard
+> number. With four reference standards — the theoretical minimum required to
+> fit the four-parameter calibration model — RMSE is highly variable (range
+> ~0.01–0.43), indicating that calibration quality depends strongly on which
+> four standards happen to be selected. Variability decreases consistently with
+> increasing standard number, with worst-case RMSE falling below 0.05 at nine
+> or more standards. From nine standards onwards, the RMSE distribution
+> collapses to a narrow band around ~0.03, indicating robust calibration
+> independent of specific standard selection. At eleven standards only one
+> combination exists, appearing as a single point. These results support a
+> practical recommendation of a minimum of five reference standards distributed
+> across the full ratio range, with seven or more preferred for highest
+> robustness.
+
+------------------------------------------------------------------------
+
+# Setup
+
+The four-parameter calibration model needs at least four standards, but which
+four are chosen matters. The sweep behind this figure fits the model on every
+subset of size 4 to 11 drawn from the eleven-point KIF13A reference series and
+evaluates the resulting calibration on a second, independently prepared series
+of the same mixtures — a held-out evaluation, so that the reported RMSE
+measures transferability of the calibration rather than its fit to its own
+standards. Two reference series are available on the plate (`laKIF13A`, series
+A, and `lbKIF13A`, series B); each is used in turn as the fitting series and
+each combination is evaluated both on itself and on the other, giving the four
+classes `AA`, `AB`, `BA`, `BB` (first letter = fitted on, second = evaluated
+on).
+
+The sweep is expensive — the full enumeration is
+`sum(choose(11, 4:11)) = 1816` combinations per series, each requiring a model
+fit and a batch refit. It is therefore cached in
+`documents/extdata/RefNum_calculation.rds` and read from there by default. Set
+the environment variable `RPCR_RECALCULATE=TRUE` before rendering to run the
+sweep from the raw plate data instead.
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+ppath <- file.path(pp, "documents", "extdata", "dPCR")
+
+# Cache location. The source script pointed at documents/data, where the file
+# no longer lives; it has been restored to documents/extdata.
+refnum_cache <- file.path(pp, "documents", "extdata", "RefNum_calculation.rds")
+
+# Recompute switch. Default FALSE: read the cached sweep.
+recalculate <- as.logical(Sys.getenv("RPCR_RECALCULATE", "FALSE"))
+
+target <- "KIF13A"
+```
+
+------------------------------------------------------------------------
+
+# Combination sweep
+
+The block below is the sweep itself. It runs only when `recalculate` is `TRUE`;
+otherwise the cached result is read.
+
+```{r}
+#| label: refnum-sweep
+
+if (recalculate) {
+
+# load data
+import <- rpcr_wrap(rpcr_readTF(file.path(ppath, "rPCR_20250916_JK KIF13A dPCR comparison_20250918_125346.xlsx")))
+import0 <- import[import$target %in% c("laKIF13A", "lbKIF13A"), ]
+import0 <- import0[import0$sample != "NTC", ]
+
+# Calibration quality metrics for theoretical vs calibrated proportions
+# df must contain:
+#   tprop = theoretical proportion
+#   cprop = calibrated proportion
+
+calc_calibration_metrics <- function(df, eps = 1e-4) {
+  stopifnot(all(c("tprop", "cprop") %in% names(df)))
+
+  d <- df[is.finite(df$tprop) & is.finite(df$cprop), ]
+
+  # Bound check
+  if (any(d$tprop < 0 | d$tprop > 1 | d$cprop < 0 | d$cprop > 1)) {
+    warning("Some proportions are outside [0,1]. Please check input data.")
+  }
+
+  # Proportion-scale residuals
+  d$error <- d$cprop - d$tprop
+  d$abs_error <- abs(d$error)
+  d$sq_error <- d$error^2
+
+  # Metrics on proportion scale
+  prop_metrics <- data.frame(
+    n = nrow(d),
+    bias = mean(d$error),
+    MAE = mean(d$abs_error),
+    RMSE = sqrt(mean(d$sq_error)),
+    max_abs_error = max(d$abs_error)
+  )
+
+  # Logit-scale metrics, excluding theoretical or calibrated boundary values
+  d_logit <- subset(d, tprop > 0 & tprop < 1 & cprop > 0 & cprop < 1)
+
+  logit <- function(x) log(x / (1 - x))
+  clamp <- function(x) pmin(pmax(x, eps), 1 - eps)
+
+  if (nrow(d_logit) > 0) {
+    d_logit$tlogit <- logit(d_logit$tprop)
+    d_logit$clogit <- logit(d_logit$cprop)
+    d_logit$logit_error <- d_logit$clogit - d_logit$tlogit
+
+    logit_metrics <- data.frame(
+      log_n = nrow(d_logit),
+      log_bias = mean(d_logit$logit_error),
+      log_MAE = mean(abs(d_logit$logit_error)),
+      log_RMSE = sqrt(mean(d_logit$logit_error^2)),
+      log_max_abs_error = max(abs(d_logit$logit_error))
+    )
+  } else {
+    logit_metrics <- data.frame(
+      log_n = 0,
+      log_bias = NA_real_,
+      log_MAE = NA_real_,
+      log_RMSE = NA_real_,
+      log_max_abs_error = NA_real_
+    )
+  }
+  tlogit <- logit(clamp(d$tprop))
+  clogit <- logit(clamp(d$cprop))
+  err <- clogit - tlogit
+
+  logit_clamp_metrics <- data.frame(
+    logc_n = length(err),
+    logc_bias = mean(err),
+    logc_MAE = mean(abs(err)),
+    logc_RMSE = sqrt(mean(err^2)),
+    logc_max_abs_error = max(abs(err))
+  )
+  cbind(prop_metrics, logit_metrics, logit_clamp_metrics)
+}
+
+res <- list()
+
+#### Series A as calibration samples
+
+my_numbers <- na.omit(unique(rpcr_calibDetect(import0[import0$target == "laKIF13A", ])$tprop))
+
+all_combinations <- lapply(4:length(my_numbers), function(m) {
+  # Generate combinations of size m, returning a list of vectors
+  combn(my_numbers, m, simplify = FALSE)
+})
+
+final_list <- unlist(all_combinations, recursive = FALSE)
+
+res$A <- do.call(rbind, lapply(seq_along(final_list), function(m) {
+  calib <- unlist(rpcr_calibrate(import0[import0$target == "laKIF13A" & import0$sample %in% paste0("Cal", final_list[[m]] * 100), ])[, -1])
+  if (!anyNA(calib[c("a", "ri", "re", "g")])) {
+  qc <- rpcr_calibDetect(rpcr_batchFit(import0[import0$target == "laKIF13A", ], calib = calib))
+  A <- cbind(ID = m, class = "AA", calc_calibration_metrics(qc), res_num = length(final_list[[m]]), refs = paste(final_list[[m]], collapse = ", "))
+  qc <- rpcr_calibDetect(rpcr_batchFit(import0[import0$target == "lbKIF13A" & import0$well != "G1", ], calib = calib))
+  B <- cbind(ID = m, class = "AB", calc_calibration_metrics(qc), res_num = length(final_list[[m]]), refs = paste(final_list[[m]], collapse = ", "))
+  rbind(A, B)
+  }}))
+
+#### Series B as calibration samples
+
+my_numbers <- na.omit(unique(rpcr_calibDetect(import0[import0$target == "lbKIF13A", ])$tprop))
+
+all_combinations <- lapply(4:length(my_numbers), function(m) {
+  # Generate combinations of size m, returning a list of vectors
+  combn(my_numbers, m, simplify = FALSE)
+})
+
+final_list <- unlist(all_combinations, recursive = FALSE)
+
+res$B <- do.call(rbind, lapply(seq_along(final_list), function(m) {
+  calib <- unlist(rpcr_calibrate(import0[import0$target == "lbKIF13A" & import0$sample %in% paste0("Cal", final_list[[m]] * 100), ])[, -1])
+  if (!anyNA(calib[c("a", "ri", "re", "g")])) {
+    qc <- rpcr_calibDetect(rpcr_batchFit(import0[import0$target == "laKIF13A", ], calib = calib))
+    A <- cbind(ID = m, class = "BA", calc_calibration_metrics(qc), res_num = length(final_list[[m]]), refs = paste(final_list[[m]], collapse = ", "))
+    qc <- rpcr_calibDetect(rpcr_batchFit(import0[import0$target == "lbKIF13A", ], calib = calib))
+    B <- cbind(ID = m, class = "BB", calc_calibration_metrics(qc), res_num = length(final_list[[m]]), refs = paste(final_list[[m]], collapse = ", "))
+    rbind(A, B)
+  }}
+))
+
+saveRDS(res, refnum_cache)
+}
+
+if (!recalculate) res <- readRDS(refnum_cache)
+
+cat("Sweep source:", if (recalculate) "recomputed from raw plate data" else refnum_cache, "\n")
+cat("Rows per fitting series: A =", nrow(res$A), ", B =", nrow(res$B), "\n")
+cat("Classes present:", paste(sort(unique(c(res$A$class, res$B$class))), collapse = ", "), "\n")
+```
+
+------------------------------------------------------------------------
+
+# Panel — RMSE against number of reference standards
+
+Each violin is the distribution of RMSE over all combinations of a given size.
+The relevant comparison is not the mean but the upper tail: a calibration
+strategy is only safe if the *worst* combination of that size is still
+acceptable, because in practice the standards are chosen once and their
+identity is not known to be favourable. The number of combinations is
+`choose(11, k)`, so the violins are widest in the middle of the range and
+collapse to a single point at eleven standards, where only one combination
+exists.
+
+The class breakdown below is built first, because it separates the two
+evaluations that the figure pools: `AA`/`BB` evaluate a calibration on the same
+series it was fitted on, `AB`/`BA` evaluate it on the held-out series. The
+legend describes the held-out case.
+
+```{r}
+#| label: figS9-class-breakdown
+#| fig-width: 5
+#| fig-height: 6
+
+res0 <- rbind(res$A, res$B)
+
+pRMSE <- ggplot(data = res0) + geom_violin(aes(x = res_num, y = RMSE, group = res_num)) + facet_grid(class ~ .) + theme_rpcr()
+
+pRMSE
+```
+
+The submitted panel is built from the series-A sweep, expanded by reference
+value. `aha` re-emits each combination once for every standard it contains,
+which is how the source script prepared the data for a per-standard
+breakdown; the expansion leaves the range of RMSE at each combination size
+unchanged but weights the violin density by combination size. The expansion is
+kept as written, because this is the object that produced the submitted figure.
+
+```{r}
+#| label: figS9-panel
+#| fig-width: 4.5
+#| fig-height: 2.8
+
+refs <- c(0, 0.05, 0.15, 0.25, 0.35, 0.5, 0.65, 0.75, 0.85, 0.95, 1)
+
+res0 <- res$A
+
+aha <- do.call(rbind, lapply(unique(res0$res_num), function(num) {
+  df <- res0[res0$res_num == num, ]
+  do.call(rbind, lapply(refs, function(x) cbind(prop = x, df[grepl(paste(x), df$refs, fixed = TRUE), ])))
+}))
+
+final <- ggplot(data = aha) + geom_violin(aes(x = res_num, y = RMSE, group = res_num)) +
+  scale_x_continuous("number of reference samples", labels = as.character(unique(aha$res_num)), breaks = unique(aha$res_num)) +
+  theme_rpcr()
+
+final
+```
+
+------------------------------------------------------------------------
+
+# Numbers quoted in the legend
+
+The statements in the legend are read off the sweep here rather than restated.
+They are computed on the unexpanded series-A result, so that each combination
+counts once.
+
+```{r}
+#| label: figS9-numbers
+
+sweep_summary <- res$A %>%
+  group_by(res_num, class) %>%
+  summarise(n_combinations = dplyr::n(),
+            min_RMSE    = min(RMSE, na.rm = TRUE),
+            median_RMSE = median(RMSE, na.rm = TRUE),
+            max_RMSE    = max(RMSE, na.rm = TRUE),
+            .groups = "drop")
+
+knitr::kable(sweep_summary, digits = 4,
+             caption = "RMSE by number of reference standards, series A fit (AA = self-evaluated, AB = held-out series)")
+
+held_out <- sweep_summary[sweep_summary$class == "AB", ]
+
+cat("Four standards, held-out evaluation: RMSE range ",
+    sprintf("%.3f", held_out$min_RMSE[held_out$res_num == 4]), " to ",
+    sprintf("%.3f", held_out$max_RMSE[held_out$res_num == 4]),
+    " over ", held_out$n_combinations[held_out$res_num == 4], " combinations.\n", sep = "")
+
+below <- held_out$res_num[held_out$max_RMSE < 0.05]
+cat("Standard numbers at which the worst-case held-out RMSE is below 0.05: ",
+    if (length(below)) paste(below, collapse = ", ") else "none", "\n", sep = "")
+
+nine_plus <- held_out[held_out$res_num >= 9, ]
+cat("Nine standards and above, held-out median RMSE: ",
+    paste(sprintf("%d standards: %.3f", nine_plus$res_num, nine_plus$median_RMSE),
+          collapse = "; "), "\n", sep = "")
+
+cat("Combinations at eleven standards: ",
+    held_out$n_combinations[held_out$res_num == 11], "\n", sep = "")
+```
+
+------------------------------------------------------------------------
+
+# Save figure
+
+The source script wrote into `documents/figures/dPCR`, a subdirectory that is
+not created anywhere in the repository; the write is routed here through
+`psave()` into `fpath` (`documents/figures`), as for every other figure
+document. The file name is otherwise unchanged.
+
+```{r}
+#| label: save-figures
+
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+
+psave("ratioPCR_figure_S9", final, width = 11.4, height = 7, dpi = 600)
+
+cat("Figure S9 output written to:", fpath, "\n")
+```
+
+------------------------------------------------------------------------
+
+# Provenance and repairs
+
+| Element | Source | Repairs applied |
+|----|----|----|
+| Panel | object `final` → `ratioPCR_figure_S9.pdf` | Cache path corrected from `documents/data/RefNum_calculation.rds` to `documents/extdata/RefNum_calculation.rds` (both read and write). The hardcoded `recalculate <- FALSE` replaced by the `RPCR_RECALCULATE` environment switch, default `FALSE`. Output directory changed from the non-existent `documents/figures/dPCR` to `fpath`. `print()` progress calls inside the sweep loops removed. Interactive dead code removed: the commented-out "all series" sweep, seven unassigned exploratory `ggplot()` calls, the `resx[order(...)][1:10,]` inspection blocks, and the `test`/`psym` symmetry analysis, none of which contributes to the figure. Plotting code for `pRMSE` and `final` unchanged. |
+
+Two points that the reader of this figure should know, neither of which was
+changed:
+
+1. **The submitted panel pools `AA` and `AB`.** `aha` is built from `res$A`,
+   which contains both the self-evaluated (`AA`) and the held-out (`AB`)
+   rows, and `final` does not facet by class. The legend describes the
+   held-out evaluation only. The class breakdown plotted above shows the two
+   separately; the pooled panel is retained because it is the figure that was
+   submitted.
+2. **`aha` duplicates rows.** Each combination is re-emitted once per reference
+   value it contains, so a combination of eleven standards contributes about
+   eleven rows and a combination of four about four. The match is a substring
+   test on the comma-joined label (`grepl(..., fixed = TRUE)`), so the
+   duplication factor is not exactly the combination size — `0` matches every
+   label containing a zero and `1` also matches `0.15`. Minimum, maximum and
+   range at each combination size are unaffected either way; only the violin
+   *density* is reweighted. The numbers section above is therefore computed on
+   the unexpanded `res$A`.
+
+------------------------------------------------------------------------
+
+# Manuscript figure
+
+The files this document writes into `documents/figures`, re-printed here at
+the size they are written at, so that the rendered document shows the panels
+as they appear in the manuscript rather than only the analysis-sized views
+above. The final chunk checks that every file is on disk.
+
+**`ratioPCR_figure_S9.pdf`** — the whole figure, 11.4 × 7 cm.
+
+```{r}
+#| label: manuscript-figure-S9
+#| echo: false
+#| fig-width: 4.49
+#| fig-height: 2.76
+
+final
+```
+
+```{r}
+#| label: manuscript-figure-files
+#| echo: false
+
+written <- c("ratioPCR_figure_S9.pdf")
+data.frame(file = written,
+           exists = file.exists(file.path(fpath, written)),
+           row.names = NULL)
+```
+
+# Reproducibility
+
+```{r}
+#| label: session-info
+#| echo: true
+
+if (requireNamespace("sessioninfo", quietly = TRUE)) {
+  sessioninfo::session_info()
+} else {
+  print(sessionInfo())
+}
+
+if (requireNamespace("renv", quietly = TRUE)) {
+  try(print(renv::status()), silent = TRUE)
+}
+```

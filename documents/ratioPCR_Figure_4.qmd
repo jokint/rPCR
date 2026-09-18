@@ -1,0 +1,682 @@
+---
+title: "ratioPCR Figure 4 — Cycle synchronisation and multi-cycle slope fitting enable robust real-time ratio estimation"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+The supplied legend file contains the figure title and the corresponding results text, but no per-panel legend paragraph for the main figures. Both are quoted verbatim below.
+
+> Figure 4: Cycle synchronisation and multi-cycle slope fitting enable robust real-time ratio estimation
+
+> Because reactions reached saturation at different absolute cycle numbers depending on template input and assay, amplification traces were synchronized using the cycle of maximal fluorescence increase (Ci), identified as the inflection point of the Rn signal and defined as relative cycle 0 (Figure 4A). This synchronisation strategy allows direct comparison of ratio estimates across reactions with distinct kinetics and is a prerequisite for the single-cycle and multi-cycle slope fitting approaches described below.
+>
+> Using Rn-based signals, calibrated proportions (ψc) were calculated for each cycle from C₋₁₀ to C₊₁₅ relative to Cᵢ and compared with uncalibrated apparent proportions (ψₐ) (Figure 4B). Calibration substantially improved accuracy across a broad cycle range for all three assays. Equivalent analyses for ΔRn and derRn signals are provided in Supplementary Figure S7A–B. RSE analysis across cycle positions confirmed that derivative-based signals (derRn) achieve lowest RSE near Cᵢ, while Rn and ΔRn signals yield progressively lower RSE at later cycles in the exponential phase, reflecting the higher signal-to-noise ratio at greater amplicon concentrations (Figure 4C).
+>
+> To further enhance robustness, we evaluated multi-cycle slope fitting over defined cycle windows. Two strategies were tested: (i) windows defined relative to Cᵢ (Figure 4D); and (ii) thresholds applied to the ΔRn derivative signal to select cycles automatically based on fluorescence increase magnitude (Figure 4E). For each window or threshold combination, the slope of the inclusion versus exclusion probe signal was calculated to estimate ψₐ, which was then calibrated. RSE heatmaps identified assay-specific optimal cycle ranges and threshold combinations (Supplementary Figure S7C–D). Comparison of all approaches confirmed that multi-cycle slope fitting provided modest but consistent improvements in accuracy and robustness over single-cycle estimates across all three assays (Figure 4F). Across all assays, mean deviation from theoretical ratios was below 1 %.
+
+| Panel | Content |
+|----|----|
+| A | Synchronisation on Cᵢ = relative cycle 0 |
+| B | ψ_c vs ψₐ per cycle C₋₁₀–C₊₁₅, Rn signal |
+| C | RSE by cycle position for Rn, ΔRn, derRn |
+| D | Design of the cycle-range slope-fitting method |
+| E | Design of the derivative-threshold method |
+| F | Single-cycle vs multi-cycle comparison |
+
+The three sources named for panels D–F use the old `qas_*` function names (`qas_fit`, `qas_calDer`, `theme_qas`) and the old QC name `RSEcpsi`. The chunks below are those scripts transplanted and renamed to the current `rpcr_*` API; the translation and the two repairs are listed in *Provenance of panels D–F* at the end of this document.
+
+# Setup
+
+`recalculate` controls whether the calibration sweeps are recomputed or read from the caches in `documents/extdata`. It is read from the environment, so a render can be driven either way without editing the document:
+
+```         
+RPCR_RECALCULATE=FALSE quarto render ratioPCR_Figure_4.qmd   # read caches
+RPCR_RECALCULATE=TRUE  quarto render ratioPCR_Figure_4.qmd   # recompute (default)
+```
+
+```{r}
+#| label: setup
+#| echo: true
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+
+# Render-time recompute switch (a plain variable, not Quarto's reserved `params`).
+recalculate <- as.logical(Sys.getenv("RPCR_RECALCULATE", "TRUE"))
+
+calibrationFile <- file.path(pp, "documents", "extdata", "20191120AS calibration.xlsx")
+resultsCache    <- file.path(pp, "documents", "extdata", "results 2026-04-28 .rds")
+
+# importing data
+import <- rpcr_wrap(rpcr_readTF(calibrationFile))
+import <- import[!import$sample == "neg. ctrl", ]
+import <- rpcr_calibDetect(import, qual = "")
+
+if (!recalculate && file.exists(resultsCache)) {
+  res <- readRDS(resultsCache)
+}
+```
+
+# Panel A — cycle synchronisation on the inflection cycle Cᵢ
+
+Absolute cycle numbers are not comparable between reactions: template input and assay chemistry shift the whole trace along the cycle axis. Panel A shows the synchronisation used throughout the real-time analysis. For one representative well (E7), the upper plot is the Rn trace of the two probe channels with the fitted inflection point — the cycle of maximal fluorescence increase, Cᵢ — and the lower plot is the same trace after re-indexing so that Cᵢ becomes relative cycle 0. Every per-cycle quantity in panels B and C, in Supplementary Figure S7 and in the cycle-range method of panel D is defined on this relative axis.
+
+`rpcr_fit(..., rtype = "ip")` locates the inflection point and, with `plot = TRUE, aslist = TRUE, line = TRUE`, returns the diagnostic plot pair.
+
+```{r}
+#| label: panel-A
+#| echo: true
+#| fig-width: 4
+#| fig-height: 6
+
+example <- rpcr_fit(import[import$well == "E7", c("FA", "FB")],
+                     model = "single",
+                     rtype = "ip",
+                     plot = TRUE,
+                     aslist = TRUE,
+                     line = TRUE)$plot
+
+Figure4A <- (example[[1]] + theme(legend.position = "none")) /
+              (example[[2]]  + theme(legend.position= "bottom"))
+
+Figure4A
+```
+
+# Single-cycle sweep across relative cycle positions
+
+Panels B and C both rest on one sweep: the full calibration is run independently at every relative cycle position from C₋₁₀ to C₊₁₅, for the raw (Rn) and baseline-subtracted (ΔRn) signal and for the untransformed (`0D`) and first-derivative (`1D`) form of each. `roff = c(cycle, cycle)` collapses the fitting window to a single cycle at that offset from Cᵢ, so each fit estimates ψₐ from one cycle only; `output = "details"` returns the per-well summary together with the calibration QC.
+
+This is 2 × 2 × 26 = 104 full calibrations. Derived from it are `results_data` (per-well ψₐ, ψ_c and their deviation from ψ) and `results_qc` (per-assay fit and calibration quality, including `RSEcprop`, the residual standard error of the calibrated proportion). The ΔRn first derivative is carried through the sweep but excluded from the figures, leaving the three signal types Rn, ΔRn and derRn.
+
+Only the two derived data frames are cached, not the `details` list, which is large and is not used downstream.
+
+```{r}
+#| label: single-cycle-sweep
+#| echo: true
+
+### single cycle calculation
+targets <- unique(import$target)
+datatypes <- c("Rn","deltaRn")
+derivatives <- c("0D","1D")
+crange <- c(-10:15)
+
+singleCycleCache <- file.path(pp, "documents", "extdata", "single cycle results.rds")
+
+if (!recalculate && file.exists(singleCycleCache)) {
+
+  singlecycle  <- readRDS(singleCycleCache)
+  results_data <- singlecycle$results_data
+  results_qc   <- singlecycle$results_qc
+
+} else {
+
+  details <- setNames(lapply(datatypes, function(datatype)
+    setNames(lapply(derivatives, function(derivative)
+      setNames(lapply(crange,function(cycle)
+        rpcr_calibrate(import,
+                       qual = "",
+                       output = "details",
+                       signal = datatype,
+                       derivative = if(derivative=="1D") TRUE else FALSE,
+                       rtype = "ip", # method to define range
+                       roff = c(cycle,cycle), # offset from range defined by rtype
+                       model = "single" # fitting method: either linear or 2nd degree polynomial (poly)
+        )
+      ), paste("c ",crange))
+    ), derivatives)
+  ), datatypes)
+
+
+  results_data <-   do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+    do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+      do.call(rbind.data.frame, lapply(crange,function(cycle)
+        cbind(datatype = datatype,
+              derivative = derivative,
+              cycle = cycle,
+              details[[datatype]][[derivative]][[paste("c ",cycle)]]$summary
+        )
+
+      ))
+    ))
+  ))
+
+
+  results_qc <- do.call(rbind.data.frame, lapply(datatypes, function(datatype)
+    do.call(rbind.data.frame, lapply(derivatives, function(derivative)
+      do.call(rbind.data.frame, lapply(crange,function(cycle)
+        cbind(datatype = datatype,
+              cycle = cycle,
+              derivative = derivative,
+              details[[datatype]][[derivative]][[paste("c ",cycle)]]$calib$summary$qc,
+              details[[datatype]][[derivative]][[paste("c ",cycle)]]$calib$summary$calib[,-1]
+        )
+      ))
+    ))
+  ))
+
+  # Cache the two derived frames so a re-render can skip the 104 calibrations.
+  try(saveRDS(list(results_data = results_data, results_qc = results_qc),
+              singleCycleCache), silent = TRUE)
+}
+
+c(rows_results_data = nrow(results_data), rows_results_qc = nrow(results_qc))
+```
+
+# Panel B — calibrated and uncalibrated proportions per cycle
+
+Panel B shows, for the Rn signal, the apparent proportion ψₐ and the calibrated proportion ψ_c estimated independently at each relative cycle from C₋₁₀ to C₊₁₅, one point per well, coloured by the theoretical proportion ψ of the reference sample and faceted by assay. Dashed grey lines mark the eleven theoretical proportions. Uncalibrated estimates drift with cycle position in the ratio-dependent way documented in Figure 1; the calibrated estimates sit on their theoretical lines across a broad cycle range for all three assays. Points are jittered horizontally by 0.2 cycles so that the three replicates at each cycle remain distinguishable.
+
+```{r}
+#| label: panel-B
+#| echo: true
+#| fig-width: 5
+#| fig-height: 6
+
+### Plots
+df1 <- results_data %>%
+  pivot_longer(
+    cols = c("aprop", "cprop", "delta"),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  filter(!(datatype == "deltaRn" & derivative == "1D"))
+
+df1 <- df1[!(df1$datatype=="deltaRn" & df1$derivative == "1D"),]
+df1 <- df1[order(df1$datatype,decreasing=TRUE),]
+
+Figure4B <- ggplot(data = df1[!(df1$variable=="delta")&df1$datatype=="Rn"&df1$derivative=="0D",]) +
+  geom_hline(yintercept = unique(df1$tprop), colour="grey80", linetype = "dashed") +
+  geom_jitter(aes(x = cycle, y = value, color = tprop), shape=20, alpha=0.7, size = 0.2,width=0.2,height=0) +
+  theme_rpcr() +
+  scale_colour_gradientn(colours = rpcr_col_probe) +
+  scale_y_continuous(breaks=unique(df1$tprop)) +
+  coord_cartesian(ylim = c(-0.1,1.1)) +
+  facet_grid( target ~ derivative + factor(datatype,c("Rn","deltaRn")) + variable)  +
+  theme(strip.text.x = element_blank(),
+        strip.text.y = element_blank(),
+        strip.background = element_blank(),
+        axis.text.y = element_text(size=5),
+        legend.position = "bottom")
+
+Figure4B
+```
+
+The chunk `Figure_1a` renders the same per-cycle quantities through `rpcr_plotCalibCycle()`, with an inset zoom on the deviation range. That rendering is the source of the ΔRn and derRn counterparts, Supplementary Figure S7A, and is built in `ratioPCR_Figure_S7.qmd`; the version above is the one assembled into the panel A–C file and is therefore used here.
+
+# Panel C — RSE across cycle positions by signal type
+
+Panel C is the accuracy summary of the same sweep: the residual standard error of the calibrated proportion (`RSEcprop`), per assay, as a function of relative cycle position, for the three signal types. It separates their working ranges — the derivative signal is most accurate close to Cᵢ, where the fluorescence increase per cycle is maximal, whereas Rn and ΔRn keep improving into the later exponential cycles as the amplicon concentration and hence the signal-to-noise ratio rise. The y-axis is clipped at 0.4 to keep the informative low-RSE region resolvable.
+
+```{r}
+#| label: panel-C
+#| echo: true
+#| fig-width: 4
+#| fig-height: 6
+
+Figure4C <- ggplot(data = results_qc[!(results_qc$datatype=="deltaRn"&results_qc$derivative=="1D"),]) +
+  theme_rpcr() +
+  geom_point(aes(x = cycle, y = RSEcprop, shape = interaction(datatype,derivative)), size = 0.5) +
+  geom_line(aes(x = cycle, y = RSEcprop, group = interaction(datatype,derivative)), linewidth =0.2) +
+  coord_cartesian(ylim=c(0,0.4), clip = "on") +
+  scale_shape_manual(values = c(16, 4, 1)) +
+  facet_grid( target ~ .)  +
+  labs(shape = "signal type") +
+  theme(strip.text.x = element_blank(),
+        strip.text.y = element_blank(),
+        strip.background = element_blank(),
+        legend.position = "bottom")
+
+Figure4C
+```
+
+```{r}
+#| label: panel-C-minima
+#| echo: true
+
+# Cycle position of minimum RSEcprop per assay and signal type, as plotted.
+qcC <- results_qc[!(results_qc$datatype == "deltaRn" & results_qc$derivative == "1D"), ]
+qcC <- qcC[!is.na(qcC$RSEcprop), ]
+qcC$signal <- factor(interaction(qcC$datatype, qcC$derivative),
+                     levels = c("Rn.0D", "deltaRn.0D", "Rn.1D"),
+                     labels = c("Rn", "deltaRn", "derRn"))
+
+do.call(rbind, lapply(split(qcC, list(qcC$target, qcC$signal), drop = TRUE), function(d)
+  d[which.min(d$RSEcprop), c("target", "signal", "cycle", "RSEcprop")]))
+```
+
+# Panel D — design of the cycle-range slope-fitting method
+
+Panel D illustrates the first multi-cycle strategy: instead of estimating ψₐ from a single cycle, the inclusion signal is regressed on the exclusion signal over a window of consecutive cycles, and the slope of that regression is the ratio estimate. The window is defined by two offsets relative to Cᵢ — a start offset and an end offset — so that windows are comparable across reactions with different kinetics. In the `ratioPCR` API this is `rtype = "ip"` with `roff = c(start, end)`; the sweep over all start/end combinations produces RSE heatmaps in Supplementary Figure S7C.
+
+The panel is drawn from one representative reaction (well G6, SYNE1, reference proportion ψ = 0.65), the well used for the method schematics in the archived source script. The upper plot is the cycle-wise fluorescence increase of the total signal, normalised to its own maximum and placed on the relative cycle axis, with Cᵢ circled in red and the window C₋₁₀ to C₋₂ highlighted. The lower plot is the same reaction in the fitting plane — inclusion probe signal against total signal — with the cycles of that window highlighted: the slope of the highlighted stretch is the apparent proportion ψₐ.
+
+```{r}
+#| label: panel-D
+#| echo: true
+#| fig-width: 3.2
+#| fig-height: 5
+
+# Representative reaction and window of the illustration.
+wellDE       <- "G6"
+panelD_window <- -10:-2          # fitting window, cycles relative to Ci
+
+dfDE <- as.data.frame(import[import$well == wellDE, ])
+dfDE$derRn <- rpcr_calDer(dfDE$FT)
+dfDE$rder  <- dfDE$derRn / max(dfDE$derRn, na.rm = TRUE) * 100
+
+# Cycle of maximal fluorescence increase. The source script marked
+# which.max(derRn); the relative cycle axis is anchored on rpcr_calCip(), i.e.
+# rcycle == 0. Both are reported by the check chunk below and the marked point
+# uses the package inflection, so that marker and window share one anchor.
+Ci_row <- dfDE[dfDE$rcycle == 0, ]
+
+# Shared look of the two method schematics.
+theme_explain <- theme_rpcr() +
+  theme(panel.grid.major = element_blank(),
+        strip.background = element_blank(),
+        legend.position  = "none")
+
+Figure4D_cycles <- ggplot() + theme_explain +
+  geom_line(data = dfDE, aes(x = rcycle, y = rder)) +
+  geom_line(data = dfDE[dfDE$rcycle %in% panelD_window, ],
+            aes(x = rcycle, y = rder), colour = "red", alpha = 0.2, linewidth = 3) +
+  geom_point(data = dfDE, aes(x = rcycle, y = rder),
+             fill = "grey30", colour = "black", shape = 21, size = 1) +
+  geom_point(data = Ci_row, aes(x = rcycle, y = rder),
+             fill = NA, colour = "red", shape = 21, size = 4) +
+  # ASCII axis labels: the pdf device's font has no subscript-i or psi glyph
+  # and drops them silently.
+  labs(x = "cycle relative to Ci", y = "fluorescence increase\n(% of maximum)")
+
+Figure4D_fit <- ggplot() + theme_explain +
+  geom_line(data = dfDE[dfDE$rcycle %in% panelD_window, ],
+            aes(x = FT, y = FA), colour = "red", alpha = 0.2, linewidth = 3) +
+  geom_point(data = dfDE, aes(x = FT, y = FA),
+             fill = "grey30", colour = "black", shape = 21, size = 1) +
+  geom_point(data = Ci_row, aes(x = FT, y = FA),
+             fill = NA, colour = "red", shape = 21, size = 4) +
+  labs(x = "total fluorescence signal", y = "inclusion probe signal")
+
+Figure4D <- Figure4D_cycles / Figure4D_fit
+
+Figure4D
+```
+
+The fit that the highlighted window stands for, run through the API so that the window drawn and the window used are the same object:
+
+```{r}
+#| label: panel-D-check
+#| echo: true
+
+fitD <- rpcr_fit(dfDE[, c("FA", "FB")],
+                 rtype = "ip",
+                 roff  = c(min(panelD_window), max(panelD_window)))
+
+c(Ci_from_rcycle   = dfDE$cycle[dfDE$rcycle == 0],
+  Ci_from_maxderRn = which.max(dfDE$derRn),
+  window_start     = fitD$RANGE[1],
+  window_end       = fitD$RANGE[2],
+  slope            = unname(fitD$SLOPE["slope"]),
+  aprop            = unname(fitD$aprop))
+```
+
+The parameter grid the window is drawn from — the grid swept for Figure S7C:
+
+```{r}
+#| label: panel-D-design
+#| echo: true
+
+# The `range11` ("IP range") section below defines the window grid:
+range1_list <- seq(-20,20,1)   # window start, cycles relative to Ci
+range2_list <- seq(-20,20,1)   # window end, cycles relative to Ci
+
+# Encoding of one such window in the standard settings vocabulary, for a
+# window from Ci-5 to Ci+10.
+settings_window <- standardSettings
+settings_window[, c("rtype", "roff")] <- c("ip:ip", paste(c(-5, 10), collapse = ":"))
+
+list(window_start = base::range(range1_list),
+     window_end   = base::range(range2_list),
+     combinations = length(range1_list) * length(range2_list),
+     valid_windows = sum(outer(range1_list, range2_list, "<")),
+     example_settings = settings_window)
+```
+
+# Panel E — design of the derivative-threshold method
+
+Panel E illustrates the second multi-cycle strategy. Rather than fixing the window relative to Cᵢ, cycles are selected automatically by thresholding the ΔRn derivative: a cycle enters the fit when its fluorescence increase exceeds a given fraction of the maximal increase. Two thresholds are applied, one on the rising flank before Cᵢ and one on the falling flank after it, so that the window adapts to the kinetics of each individual reaction. In the API this is `rtype = "dynamic"` with `tres = c(threshold1, threshold2)`. Chunk `range1` ("tres single range") sweeps a single threshold in 0.01 steps; chunk `range10` ("tres double range") sweeps both in 0.05 steps, and its RSE heatmaps are Supplementary Figure S7D.
+
+The panel is drawn from the same reaction as panel D and has the same two plots, on the absolute cycle axis: the normalised fluorescence increase with the two thresholds marked and the cycles they select highlighted, and the fitting plane with the same cycles highlighted. The thresholds used for the illustration are 25 % of the maximal increase on the rising flank and 50 % on the falling flank; the window they select is returned by `rpcr_fit(..., rtype = "dynamic")`, so the cycles drawn are the cycles fitted.
+
+```{r}
+#| label: panel-E
+#| echo: true
+#| fig-width: 3.2
+#| fig-height: 5
+
+# Thresholds of the illustration.
+panelE_tres <- c(0.25, 0.5)      # rising flank, falling flank
+
+rangeE        <- rpcr_fit(dfDE[, c("FA", "FB")],
+                          rtype = "dynamic", tres = panelE_tres)$RANGE
+panelE_cycles <- rangeE[1]:rangeE[2]
+
+Figure4E_cycles <- ggplot() + theme_explain +
+  geom_hline(yintercept = panelE_tres * 100,
+             colour = "grey60", linetype = "dashed", linewidth = 0.2) +
+  geom_line(data = dfDE, aes(x = cycle, y = rder)) +
+  geom_line(data = dfDE[dfDE$cycle %in% panelE_cycles, ],
+            aes(x = cycle, y = rder), colour = "red", alpha = 0.2, linewidth = 3) +
+  geom_point(data = dfDE, aes(x = cycle, y = rder),
+             fill = "grey30", colour = "black", shape = 21, size = 1) +
+  geom_point(data = Ci_row, aes(x = cycle, y = rder),
+             fill = NA, colour = "red", shape = 21, size = 4) +
+  labs(x = "cycle", y = "fluorescence increase\n(% of maximum)")
+
+Figure4E_fit <- ggplot() + theme_explain +
+  geom_line(data = dfDE[dfDE$cycle %in% panelE_cycles, ],
+            aes(x = FT, y = FA), colour = "red", alpha = 0.2, linewidth = 3) +
+  geom_point(data = dfDE, aes(x = FT, y = FA),
+             fill = "grey30", colour = "black", shape = 21, size = 1) +
+  geom_point(data = Ci_row, aes(x = FT, y = FA),
+             fill = NA, colour = "red", shape = 21, size = 4) +
+  labs(x = "total fluorescence signal", y = "inclusion probe signal")
+
+Figure4E <- Figure4E_cycles / Figure4E_fit
+
+Figure4E
+```
+
+```{r}
+#| label: panel-E-check
+#| echo: true
+
+fitE <- rpcr_fit(dfDE[, c("FA", "FB")], rtype = "dynamic", tres = panelE_tres)
+
+c(threshold_low  = panelE_tres[1],
+  threshold_high = panelE_tres[2],
+  window_start   = fitE$RANGE[1],
+  window_end     = fitE$RANGE[2],
+  n_cycles       = length(panelE_cycles),
+  slope          = unname(fitE$SLOPE["slope"]),
+  aprop          = unname(fitE$aprop))
+```
+
+The threshold grids swept for Figure S7D:
+
+```{r}
+#| label: panel-E-design
+#| echo: true
+
+# Chunks `range1` ("tres single range") and `range10` ("tres double range")
+# define the threshold grids:
+tres_single <- seq(0,0.99,0.01)   # single threshold, one-sided window
+tres_double <- seq(0,0.99,0.05)   # threshold 1 (before Ci) x threshold 2 (after Ci)
+
+settings_threshold <- standardSettings
+settings_threshold[, c("rtype", "tres")] <- c("dynamic:dynamic", paste(c(0.05, 0.3), collapse = ":"))
+
+list(single_threshold_grid = base::range(tres_single),
+     single_threshold_n    = length(tres_single),
+     double_threshold_grid = base::range(tres_double),
+     double_threshold_combinations = length(tres_double)^2,
+     example_settings = settings_threshold)
+```
+
+# Panel F — single-cycle against multi-cycle approaches
+
+Panel F compares the ratio-estimation strategies on the same reference series: fixed full-range fits, single-cycle fits anchored on Cᵢ, threshold-selected dynamic windows, and their combinations. Each row of the table below is one strategy, characterised by the range type applied to the start and the end of the fitting window (`rtype`), the thresholds (`tres`) and the fitting model, and scored by `RSEcprop` per assay plus the mean across the three assays. Multi-cycle fits give a modest but consistent reduction of RSE relative to single-cycle estimates.
+
+`get_qc()` wraps one `rpcr_calibrate()` call and returns a one-row summary; the scenario list is `rbind()`-ed over the strategies tested.
+
+```{r}
+#| label: panel-F
+#| echo: true
+
+analysis <- "different scenarios"
+
+get_qc <- function(df,
+                   qual="",
+            signal="Rn",
+            tres = 0,     # treshold value to define dynamic range
+            rtype = c("full"), # method to define range
+            roff = c(0,0), # offset from range defined by rtype
+            method = c("FA","FT"),
+            model = "linear",
+                   ...){
+
+temp0 <- data.frame(signal=signal,rtype=paste(rtype,collapse=":"),roff=paste(roff,collapse=":"),tres=paste(tres,collapse=":"),method=paste(method,collapse=":"),model= model)
+temp1 <- rpcr_calibrate(df,tres=tres,rtype=rtype,roff=roff,method=method,model=model,qual=qual,output="qc",...)
+rownames(temp1) <- temp1$target
+
+temp2 <- data.frame(t(temp1))["RSEcprop",]
+
+cbind(temp0,mean = mean(temp1$RSEcprop),temp2)
+}
+
+
+if (recalculate || is.null(res[[analysis]])) {
+res[[analysis]] <- rbind(
+  get_qc(import,rtype=c("full","full")),
+  get_qc(import,rtype=c("full","full")),
+get_qc(import,rtype=c("ip","full")),
+get_qc(import,rtype=c("full","ip")),
+get_qc(import,rtype=c("dynamic","full")),
+get_qc(import,rtype=c("full","dynamic")),
+get_qc(import,rtype=c("dynamic","dynamic")),
+get_qc(import,rtype=c("dynamic","ip")),
+get_qc(import,rtype=c("ip","dynamic")),
+get_qc(import,rtype=c("dynamic","full"),tres=-1),
+get_qc(import,rtype=c("dynamic","full"),tres=0),
+get_qc(import,rtype=c("dynamic","full"),tres=0.05),
+get_qc(import,rtype=c("dynamic","full"),tres=0.1),
+get_qc(import,rtype=c("dynamic","full"),tres=0.15),
+get_qc(import,rtype=c("dynamic","full"),tres=0.2),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.1)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.3)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.33)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0,0.5)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.1)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.3)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.33)),
+get_qc(import,rtype=c("dynamic","dynamic"),tres=c(0.05,0.5))
+)
+}
+
+knitr::kable(res[[analysis]], digits = 4,
+             caption = "Residual standard error of the calibrated proportion (RSEcprop) per assay, and the mean across assays, for each ratio-estimation strategy. rtype gives the range definition applied to the start and end of the fitting window; tres the derivative thresholds.")
+```
+
+```{r}
+#| label: panel-F-best
+#| echo: true
+
+# Best strategy by mean RSE across the three assays, and the mean deviation
+# from theoretical ratios it corresponds to (results text: below 1%).
+scen <- res[[analysis]]
+best <- scen[which.min(scen$mean), ]
+list(best_strategy = best,
+     mean_RSEcprop_percent = 100 * best$mean,
+     single_cycle_reference = scen[scen$rtype == "ip:full", ])
+```
+
+## The published comparison plot
+
+The panel as printed is not this table but the per-well deviation behind it: for five strategies — the best single-cycle position of each of the three signal types, the best threshold pair and the best cycle window — the absolute deviation of the calibrated proportion from the theoretical proportion, \|ψ_c − ψ\|, in percentage points. Bars are the mean over all reference reactions with their standard error, points are the individual reactions coloured by the theoretical proportion, and the fourth facet pools the three assays.
+
+The five strategies and their positions are read out of the three sweeps: Rn at C₊₁₅, ΔRn at C₊₃ and derRn at Cᵢ from the single-cycle sweep; thresholds 0 / 0.1 from the double-threshold sweep; the window C₋₁₃ to C₊₈ from the cycle-range sweep. The single-cycle strategies are taken from `results_data` computed above; the two multi-cycle strategies are two further `rpcr_calibrate()` calls, since only their RSE, not their per-well deviations, survives in the cached sweep results.
+
+```{r}
+#| label: panel-F-comparison
+#| echo: true
+#| fig-width: 8
+#| fig-height: 3
+
+keep <- c("well", "sample", "target", "tprop", "aprop", "cprop", "delta")
+
+single_best <- list("single Rn"      = list(datatype = "Rn",      derivative = "0D", cycle = 15),
+                    "single deltaRn" = list(datatype = "deltaRn", derivative = "0D", cycle =  3),
+                    "single derRn"   = list(datatype = "Rn",      derivative = "1D", cycle =  0))
+
+top <- lapply(names(single_best), function(k) {
+  s <- single_best[[k]]
+  d <- results_data[results_data$datatype   == s$datatype &
+                    results_data$derivative == s$derivative &
+                    results_data$cycle      == s$cycle, ]
+  data.frame(cat = k, d[, keep])
+})
+names(top) <- names(single_best)
+
+top[["tres"]] <- data.frame(
+  cat = "tres",
+  rpcr_calibrate(import, qual = "", output = "details", signal = "Rn",
+                 rtype = "dynamic", tres = c(0, 0.1), model = "linear")$summary[, keep])
+
+top[["range"]] <- data.frame(
+  cat = "range",
+  rpcr_calibrate(import, qual = "", output = "details",
+                 rtype = "ip", roff = c(-13, 8), model = "linear")$summary[, keep])
+
+# Deviations in percentage points.
+top <- lapply(top, function(x) { x$delta <- x$delta * 100; x })
+
+df_all  <- do.call(rbind, top)
+df_pool <- df_all; df_pool$target <- "all"
+
+dev_summary <- function(d, target_label) {
+  data.frame(cat    = unique(d$cat),
+             target = target_label,
+             mean   = mean(abs(d$delta), na.rm = TRUE),
+             sd     = stats::sd(abs(d$delta), na.rm = TRUE),
+             se     = stats::sd(abs(d$delta), na.rm = TRUE) / sqrt(sum(!is.na(d$delta))))
+}
+
+data_F <- rbind(
+  do.call(rbind, lapply(top, function(x)
+    do.call(rbind, lapply(unique(x$target), function(y) dev_summary(x[x$target == y, ], y))))),
+  do.call(rbind, lapply(top, function(x) dev_summary(x, "all"))))
+
+cat_levels    <- c("single Rn", "single deltaRn", "single derRn", "tres", "range")
+target_levels <- c("KIF13A", "NUMA1", "SYNE1", "all")
+
+for (d in c("data_F", "df_all", "df_pool")) {
+  tmp <- get(d)
+  tmp$cat    <- factor(tmp$cat, levels = cat_levels)
+  tmp$target <- factor(tmp$target, levels = target_levels)
+  assign(d, tmp)
+}
+
+Figure4F <- ggplot(data_F) +
+  geom_bar(aes(x = cat, y = mean), stat = "identity", col = "black", fill = "grey90") +
+  geom_errorbar(aes(x = cat, ymin = mean - se, ymax = mean + se),
+                width = 0.4, colour = "black", alpha = 0.9, linewidth = 0.3) +
+  geom_jitter(data = df_all,  aes(x = cat, y = abs(delta), fill = tprop),
+              shape = 21, alpha = 0.5, width = 0.1, size = 0.6, stroke = 0.1) +
+  geom_jitter(data = df_pool, aes(x = cat, y = abs(delta), fill = tprop),
+              shape = 21, alpha = 0.5, width = 0.1, size = 0.6, stroke = 0.1) +
+  facet_wrap(. ~ target, nrow = 1) +
+  scale_fill_gradientn(colours = rpcr_col_probe) +
+  theme_rpcr() +
+  labs(y = "deviation |psi_c - psi| (percentage points)") +
+  theme(panel.grid.major = element_blank(),
+        axis.title.x     = element_blank(),
+        axis.text.x      = element_text(angle = 45, hjust = 1),
+        strip.background = element_blank(),
+        legend.position  = "bottom")
+
+Figure4F
+```
+
+```{r}
+#| label: panel-F-deviation
+#| echo: true
+
+# Mean absolute deviation per strategy, pooled over assays (results text: below 1 %).
+data_F[data_F$target == "all", c("cat", "mean", "sd", "se")]
+```
+
+# Save figure
+
+Panels A–C are assembled left to right with spacers and written as `ratioPCR_figure_4A-C.pdf` at the journal's single-column width; `free(..., type = "space")` lets panel A keep its own vertical space in the composition. Panels D, E and F are written as one file each, at the size their source scripts used (7.6 × 6.4 cm for the two method schematics, 20 × 7.5 cm for the comparison), and are placed next to A–C at layout stage.
+
+```{r}
+#| label: save-figure
+#| echo: true
+#| fig-width: 11
+#| fig-height: 6
+
+Figure4ABC <- (free(Figure4A,type="space") | plot_spacer() | Figure4B| plot_spacer() | Figure4C) + plot_layout(widths=c(10,0.5,10,0.5,10))
+
+psave(filename = "ratioPCR_figure_4A-C",
+      plot = Figure4ABC,
+      path = fpath,
+      device = "pdf",
+      width = 11.4,
+      height = 8,
+      units = "cm",
+      dpi = 1000)
+
+psave(filename = "ratioPCR_figure_4D", plot = Figure4D, path = fpath,
+      device = "pdf", width = 7.6, height = 6.4, units = "cm", dpi = 1000)
+
+psave(filename = "ratioPCR_figure_4E", plot = Figure4E, path = fpath,
+      device = "pdf", width = 7.6, height = 6.4, units = "cm", dpi = 1000)
+
+psave(filename = "ratioPCR_figure_4F", plot = Figure4F, path = fpath,
+      device = "pdf", width = 20, height = 7.5, units = "cm", dpi = 1000)
+
+# The scenario RSE table behind the panel F comparison, written next to the
+# figure files so the numbers are recoverable.
+write.csv(res[[analysis]],
+          file.path(fpath, "ratioPCR_figure_4F_scenarios.csv"),
+          row.names = FALSE)
+
+# Per-strategy deviations plotted in panel F.
+write.csv(data_F,
+          file.path(fpath, "ratioPCR_figure_4F_deviation.csv"),
+          row.names = FALSE)
+
+list.files(fpath, pattern = "^ratioPCR_figure_4", full.names = FALSE)
+```
+
+# Provenance of panels D–F
+
+The three panels are reconstructed in this document. The panel map recorded only the parameter sweeps (`range11`, `range1`/`range10`, "different scenarios") as their source, and those chunks compute the sweeps and draw the Supplementary Figure S7 heatmaps, not the panels.
+
+| Panel | Objects |
+|----|----|
+| D | `p7` (relative cycle axis, window C₋₁₀–C₋₂), `p8` (fitting plane) |
+| E | `p5` (absolute cycle axis, thresholds 0.25 / 0.5), `p6` (fitting plane) |
+| F | `plot1` (mean \|ψ_c − ψ\| per strategy, faceted by assay plus pooled) |
+
+Translation and repairs:
+
+1.  **API rename.** The archived scripts predate the package rename: `qas_fit()` → `rpcr_fit()`, `qas_calDer()` → `rpcr_calDer()`, `theme_qas()` → `theme_rpcr()`, `qas_col_probe` → `rpcr_col_probe`, and the columns `Fincl`, `Fexcl`, `Ftotal` → `FA`, `FB`, `FT`. The QC name `RSEcpsi` of the archived sweeps is `RSEcprop` here, and `tPSI` is `tprop`.
+
+2.  **Repair — the inflection marker in the fitting-plane plots.** `p8` marks Cᵢ with `df[df$rycle == Cmax, ]`; `rycle` is a typo for `rcycle`, so the subset is empty and the red marker is silently absent from that plot. It is drawn here. Along with it, the marker anchor was made consistent: the archived scripts mark `which.max(derRn)` while the relative cycle axis is anchored on `rpcr_calCip()`, and the two need not coincide. Both values are printed by `panel-D-check`; the marker uses the package inflection, so marker and window share one anchor.
+
+3.  **Addition — threshold guides in panel E.** Two dashed horizontal lines at 25 % and 50 % of the maximal fluorescence increase were added, so that the cycles the method selects can be read off the plot. Nothing else in the panel changed.
+
+4.  **Panel F data path.** The five strategies were read out of the `details` lists of the three sweeps. Those lists are dropped before caching (they are large and nothing downstream reads them), so the three single-cycle strategies are taken from `results_data` of the sweep in this document, and the two multi-cycle strategies are recomputed as two `rpcr_calibrate()` calls with the published settings. The strategy positions — Rn at C₊₁₅, ΔRn at C₊₃, derRn at Cᵢ, thresholds 0 / 0.1, window C₋₁₃ to C₊₈ — are the optima of the sweeps as submitted.
+
+5.  **Axis labels.** The archived scripts blank all axis titles, because the panels were labelled at layout stage. They are labelled here so the document is readable on its own; the saved PDFs carry the labels and can be replaced by the layout labels if the figure is reassembled.
+
+The representative reaction of panels D and E is well G6 (SYNE1, ψ = 0.65), as in the archived script; panel A uses well E7 (KIF13A, ψ = 0.35).

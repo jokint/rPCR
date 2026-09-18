@@ -1,0 +1,314 @@
+---
+title: "ratioPCR Figure S4 — Full uncropped agarose gel images of RT–PCR reference sample series"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+    code-fold: true
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    number-sections: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+# Figure legend
+
+> **Supplementary Figure S4: Full uncropped agarose gel images of RT–PCR reference sample series**
+>
+> Full-length gel images from agarose gel electrophoresis of RT–PCR products from synthetic reference samples containing defined inclusion:exclusion isoform ratios (0%, 5%, 15%, 25%, 35%, 50%, 65%, 75%, 85%, 95%, 100% inclusion, and no-template control, NTC) for KIF13A (top), NUMA1 (middle), and SYNE1 (bottom). A SolisBiodyne 100 bp DNA ladder (Ready to Load) is shown in the leftmost lane of each gel, confirming the expected amplicon sizes. The cropped versions of these gels without the ladder lane are shown in Figure 1D. KIF13A: inclusion band \~212 bp, exclusion band \~173 bp. NUMA1: inclusion band \~189 bp, exclusion band \~147 bp. SYNE1: inclusion band \~149 bp, exclusion band \~80 bp. In all three assays, the ratio of upper to lower band shifts progressively from a dominant lower band (0% inclusion) to a dominant upper band (100% inclusion), consistent with the expected isoform proportions.
+
+The purpose of this supplement is disclosure rather than quantification. Figure 1D shows cropped strips of the same three gels with the ladder lane removed, so the full frames are reproduced here together with the exact display transform applied to each, the region that Figure 1D shows, and the evidence that no pixel was saturated. Quantification of isoform proportions in this manuscript is done by real-time fluorescence (rPCR), not by densitometry of these gels; the gels only confirm that co-amplification with the common primer pairs produces the two expected amplicons and that their relative intensity tracks the intended reference proportions.
+
+Two renderings of each gel are shown side by side. The left column is strictly linear — black point 0, a white point at or below full scale, γ = 1, not inverted — and uses the same display parameters as the corresponding strip in Figure 1D. The right column applies the non-linear display transform stored in the scanner file (inverted), which makes wells, gel edges and faint background visible. Only the right column involves a γ ≠ 1 adjustment; it serves display only.
+
+# Setup
+
+The scanner files are Bio-Rad `.scn` containers: a MIME envelope in which the `ImageData` part holds the raw frame as uncompressed 16-bit little-endian, row-major pixels, while frame size, data ceiling, exposure time and the stored Image Lab display transform sit in XML parts elsewhere in the file. The reader below extracts both. It was validated once against Fiji/Bio-Formats exports of the same three files, which gave bit-identical pixel matrices; the source script asks for those exports to be deposited alongside the `.scn` files so the check can be repeated. No image-processing package is required — `grid` (which ships with R) is sufficient.
+
+```{r}
+#| label: setup
+
+pp <- here::here()
+source(file.path(pp, "documents", "scripts", "Figure_settings.R"))
+
+# Output naming (added when the figure documents were put on one convention).
+# documents/figures holds the manuscript assets, one file per panel or panel
+# range, named ratioPCR_figure_<figure><panel>. documents/figures/components
+# holds the pieces that were assembled into a panel outside R, the diagnostic
+# plots and the alternative views, under their working names.
+cpath <- file.path(fpath, "components")
+dir.create(fpath, recursive = TRUE, showWarnings = FALSE)
+dir.create(cpath, recursive = TRUE, showWarnings = FALSE)
+library(grid)
+
+files     <- c(KIF13A = "20191121AS calibration Kif13a 45min.scn",
+               NUMA1  = "20191121AS calibration Numa1 45min.scn",
+               SYNE1  = "20191121AS calibration Syne1 45min.scn")
+files <- setNames(
+  file.path(pp, "documents", "extdata", "images", files),
+  names(files)
+)
+
+lin_white <- c(4095, 4095, 2118)   ## CHECK ## must match panel D
+lin_gamma <- c(1,    1,    1)      ## CHECK ## 1 = strictly linear
+
+lanes     <- c("0","5","15","25","35","50","65","75","85","95","100")
+n_slots   <- length(lanes) + 1L    # + NTC, which carries no signal
+
+# Which ladder bands to annotate, per assay. Only the sizes are given here: the
+# heights are measured in the ladder lane by ladder_fit() below, never typed in.
+# Figure 1D draws the ticks; this document needs the same two constants because
+# they can widen the crop window it outlines on the full frames.
+marker_bp <- list(KIF13A = 200, NUMA1 = 200, SYNE1 = c(200, 100))
+MPAD      <- 10L   # px of clear gel kept above the topmost annotated band
+
+# ------------------------------------------------------------------ read .scn
+
+xml_val <- function(b, tag, attr) {
+  p <- grepRaw(charToRaw(tag), b, fixed = TRUE)[1]
+  s <- b[p:min(length(b), p + 400)]
+  t <- rawToChar(s[s != as.raw(0)]); Encoding(t) <- "UTF-8"
+  regmatches(t, regexec(paste0(attr, '="([^"]*)"'), t))[[1]][2]
+}
+
+read_scn <- function(path) {
+  b <- readBin(path, "raw", n = file.info(path)$size)
+  w <- as.integer(xml_val(b, "<size_pix", "width"))
+  h <- as.integer(xml_val(b, "<size_pix", "height"))
+  p <- grepRaw(charToRaw("Content-Description: ImageData"), b, fixed = TRUE)[1]
+  o <- grepRaw(charToRaw("\r\n\r\n"), b, offset = p, fixed = TRUE)[1] + 4L
+  v <- matrix(readBin(b[o:(o + 2 * w * h - 1)], "integer", n = w * h,
+                      size = 2L, signed = FALSE, endian = "little"),
+              nrow = h, ncol = w, byrow = TRUE)
+  list(v = v,
+       ceiling = as.numeric(xml_val(b, "<scanner",       "data_ceiling")),
+       gamma   = as.numeric(xml_val(b, "<transform",     "gamma")),
+       frac    = as.numeric(xml_val(b, "<transform",     "high_frac")),
+       expo    = as.numeric(xml_val(b, "<exposure_time", "value")))
+}
+
+# ------------------------------------------------------------------ auto crop
+# Rows: vertical extent of signal spanning many lanes (a ladder lane is only a
+# few columns wide and drops out at the profile cut). Columns: measured inside
+# that row band, then extended right by one lane pitch per signal-free lane.
+
+auto_crop <- function(v) {
+  bg <- median(v); m <- v > bg + 8 * median(abs(v - bg)) * 1.4826
+  # stats::filter, not dplyr::filter: Figure_settings.R attaches tidyverse,
+  # which masks the moving-average filter this line needs.
+  sm <- function(x) { z <- as.numeric(stats::filter(x, rep(1/9, 9))); z[is.na(z)] <- 0; z }
+  rp <- sm(rowSums(m)); r <- range(which(rp > .3 * max(rp)))
+  cp <- sm(colSums(m[r[1]:r[2], ])); k <- cp > .3 * max(cp); cc <- range(which(k))
+  nd <- sum(k[-1] & !k[-length(k)]) + k[1]
+  if (nd != n_slots - 1L) warning(sprintf("%d lane clusters, expected %d", nd, n_slots - 1L))
+  c(r[1] - 12, r[2] + 12, cc[1] - 14,
+    round(cc[2] + (cc[2] - cc[1]) / (nd - 1) * (n_slots - nd)) + 14)
+}
+
+# ----------------------------------------------------------------- ladder lane
+# The ladder is the leftmost loaded lane and the auto crop starts one lane pitch
+# to its right, so the ladder occupies the columns left of cr[3]. Marker heights
+# are measured there rather than read off by eye.
+#
+# lad_peaks() takes band rows as local maxima of the lane's row profile after a
+# running-median baseline is removed, picked strongest-first with a minimum
+# separation so one band cannot be counted twice.
+#
+# ladder_fit() assigns sizes from the two unambiguous features of a SolisBiodyne
+# 100 bp Ready-to-Load ladder (product sheet: documents/extdata/images/
+# 8603_100bp_DNA_Ladder.png): the lowest band is 100 bp, and the brightest band
+# of the 100-1000 bp cluster is the bolded 500 bp reference band, which carries
+# 104 ng against 31-42 ng in its neighbours. Those two anchors fix
+# row = a + b*log10(bp); that the 200, 300 and 400 bp bands then land within
+# LAD_TOL px of that prediction is the check that the assignment is right, and
+# a and b are refitted by least squares over every matched band. Fewer than four
+# matched bands is an error rather than a silently shifted annotation.
+
+LAD_TOL <- 6      # px; band spacing at 300-400 bp is ~40 px, so this is unambiguous
+
+lad_peaks <- function(prof, sep = 8L, min_prom = .12) {
+  s <- as.numeric(stats::filter(prof, rep(1/5, 5)))
+  s[is.na(s)] <- min(prof, na.rm = TRUE)
+  z <- s - stats::runmed(s, 61L)
+  cand <- which(z > min_prom * max(z)); out <- integer(0)
+  while (length(cand)) {
+    i <- cand[which.max(z[cand])]
+    out <- c(out, i); cand <- cand[abs(cand - i) > sep]
+  }
+  list(row = sort(out), h = z[sort(out)])
+}
+
+ladder_fit <- function(v, cr, half = 6L) {
+  cp <- colMeans(v[, 1:(cr[3] - 1L), drop = FALSE])
+  z  <- as.numeric(stats::filter(cp, rep(1/5, 5))); z[is.na(z)] <- 0
+  lc <- which.max(z)
+  cols <- max(1L, lc - half):min(ncol(v), lc + half)
+  pk <- lad_peaks(rowMeans(v[, cols, drop = FALSE]))
+  r100 <- max(pk$row)                 # lowest band    = smallest fragment
+  r500 <- pk$row[which.max(pk$h)]     # brightest band = 500 bp reference band
+  b0 <- (r500 - r100) / (log10(500) - log10(100)); a0 <- r100 - b0 * log10(100)
+  rows <- numeric(0); used <- numeric(0)
+  for (s in c(100, 200, 300, 400, 500)) {
+    d <- abs(pk$row - (a0 + b0 * log10(s)))
+    if (min(d) <= LAD_TOL) { rows <- c(rows, pk$row[which.min(d)]); used <- c(used, s) }
+  }
+  if (length(used) < 4L)
+    stop(sprintf("ladder lane: only %d of 5 bands (100-500 bp) matched the two-anchor fit",
+                 length(used)))
+  f <- stats::lm(rows ~ log10(used))
+  list(cols = range(cols), a = unname(coef(f)[1]), b = unname(coef(f)[2]),
+       bands = setNames(rows, used), resid = max(abs(residuals(f))))
+}
+
+# ------------------------------------------------------------------- load all
+
+gel <- lapply(seq_along(files), function(i) {
+  s <- read_scn(files[i]); cr <- auto_crop(s$v)
+  # Ladder-derived marker rows, and the crop extension they force. The auto crop
+  # brackets the sample bands with 12 px of headroom, so an annotated band that
+  # runs above the largest amplicon falls outside it: SYNE1, whose products are
+  # 149 and 80 bp, has its 200 bp band ~20 px above the bracket. The top of the
+  # crop is therefore lowered to clear the topmost marker by MPAD px. A marker
+  # that would fall below the crop is dropped with a warning rather than drawn
+  # at the wrong height.
+  lad <- ladder_fit(s$v, cr)
+  mr  <- setNames(lad$a + lad$b * log10(marker_bp[[i]]),
+                  paste(marker_bp[[i]], "bp"))
+  if (min(mr) - MPAD < cr[1]) cr[1] <- max(1L, floor(min(mr) - MPAD))
+  keep <- mr >= cr[1] & mr <= cr[2]
+  if (any(!keep))
+    warning(sprintf("%s: %s below the crop window, not annotated", names(files)[i],
+                    paste(names(mr)[!keep], collapse = ", ")))
+  list(crop = cr, expo = s$expo, white = round(s$frac * s$ceiling), gamma = s$gamma,
+       ceiling = s$ceiling,
+       dim  = dim(s$v), max = max(s$v),
+       ladder = lad, marker_rows = mr[keep],
+       markers = (mr[keep] - cr[1]) / (cr[2] - cr[1]),
+       lin  = pmin(s$v / lin_white[i], 1)^lin_gamma[i],
+       enh  = 1 - pmin(s$v / (s$frac * s$ceiling), 1)^s$gamma,
+       strip = pmin(s$v[cr[1]:cr[2], cr[3]:cr[4]] / lin_white[i], 1)^lin_gamma[i])
+})
+names(gel) <- names(files)
+
+# place a viewport by inches from the top-left of the page
+at <- function(x, y, w, h, PH)
+  viewport(x = unit(x, "in"), y = unit(PH - y, "in"),
+           width = unit(w, "in"), height = unit(h, "in"), just = c("left", "top"))
+```
+
+## Acquisition parameters and crop window
+
+The source script reports these per-image values as console messages, which a rendered document suppresses. They are tabulated instead, because three of them are quoted in the figure caption drawn onto the page (exposure, frame size, per-image maximum against the scanner ceiling) and the crop window is what ties this supplement to Figure 1D. `white` and `gamma` are the parameters of the stored display transform used in the enhanced column; `lin_white` above is the white point of the linear column and must match the value used for Figure 1D.
+
+```{r}
+#| label: acquisition-parameters
+
+knitr::kable(
+  data.frame(
+    assay        = names(gel),
+    `frame (px)` = sapply(gel, function(g) paste(g$dim[2], "\u00d7", g$dim[1])),
+    `exposure (s)` = sprintf("%.2f", sapply(gel, `[[`, "expo")),
+    `max value`  = sapply(gel, `[[`, "max"),
+    `ceiling`    = sapply(gel, `[[`, "ceiling"),
+    `linear white` = lin_white,
+    `stored white` = sapply(gel, `[[`, "white"),
+    `stored gamma` = sprintf("%.4f", sapply(gel, `[[`, "gamma")),
+    `crop rows`  = sapply(gel, function(g) paste(g$crop[1], g$crop[2], sep = "-")),
+    `crop cols`  = sapply(gel, function(g) paste(g$crop[3], g$crop[4], sep = "-")),
+    check.names  = FALSE, row.names = NULL
+  ),
+  caption = "Acquisition parameters read from the .scn XML parts, and the automatically determined crop window shown in Figure 1D."
+)
+```
+
+# Full gels — linear and display-enhanced
+
+The page is laid out directly in `grid` at final print size (A4 portrait, 0.6 in margins), because the three frames must be reproduced at a fixed pixel aspect ratio and the two columns must be strictly comparable in scale. Panel height is the smaller of the width-limited and the page-limited value, so the three gels plus their per-image caption lines and the block legend fit on one page. The red outline in the left column is the crop window computed in the setup chunk, i.e. exactly the region reproduced in Figure 1D.
+
+The ladder lane is the leftmost lane of each scanned gel and is therefore present in these full frames. It is annotated only indirectly: the marker positions used in Figure 1D (100 bp and 200 bp) were read off this ladder by hand. The vendor reference image `documents/extdata/images/8603_100bp_DNA_Ladder.png` is available in the repository for comparison but is not drawn into this figure, and the band sizes quoted in the legend (KIF13A 212/173 bp, NUMA1 189/147 bp, SYNE1 149/80 bp) are stated in prose rather than annotated onto the gels.
+
+```{r}
+#| label: suppl-gels-layout
+
+PW <- 8.27; PH <- 11.69; M <- .6; GX <- .28; LABW <- .42; CAP <- .42; LEG <- 2.4
+cw <- (PW - 2 * M - LABW - GX) / 2
+ph <- min(cw * gel[[1]]$dim[1] / gel[[1]]$dim[2],
+          (PH - 2 * M - .3 - length(gel) * CAP - LEG) / length(gel))
+pw <- ph * gel[[1]]$dim[2] / gel[[1]]$dim[1]
+
+draw_suppl_gels <- function() {
+  grid.newpage()
+
+  for (j in 1:2)
+    grid.text(c("Linear, as in Figure 1D", "Display-enhanced")[j],
+              x = unit(M + LABW + (j - 1) * (cw + GX) + cw / 2, "in"),
+              y = unit(PH - M, "in"), gp = gpar(fontsize = 10, fontface = "bold"))
+
+  y <- M + .3
+  for (i in seq_along(gel)) {
+    g <- gel[[i]]; cr <- g$crop
+    grid.text(names(gel)[i], x = unit(M + .12, "in"), y = unit(PH - y - ph / 2, "in"),
+              rot = 90, gp = gpar(fontsize = 10, fontface = "bold"))
+    for (j in 1:2) {
+      x <- M + LABW + (j - 1) * (cw + GX) + (cw - pw) / 2
+      pushViewport(at(x, y, pw, ph, PH))
+      grid.raster(if (j == 1) g$lin else g$enh, interpolate = FALSE,
+                  width = unit(1, "npc"), height = unit(1, "npc"))
+      if (j == 1)   # region shown in panel D
+        grid.rect(x = unit(mean(cr[3:4]) / g$dim[2], "npc"),
+                  y = unit(1 - mean(cr[1:2]) / g$dim[1], "npc"),
+                  width = unit(diff(cr[3:4]) / g$dim[2], "npc"),
+                  height = unit(diff(cr[1:2]) / g$dim[1], "npc"),
+                  gp = gpar(col = "#E8412C", fill = NA, lwd = .9))
+      grid.rect(gp = gpar(col = "grey40", fill = NA, lwd = .5))
+      popViewport()
+      grid.text(if (j == 1)
+                  sprintf("black 0, white %d, \u03b3 = %.1f, not inverted",
+                          lin_white[i], lin_gamma[i])
+                else
+                  sprintf("black 0, white %d, \u03b3 = %.4f, inverted", g$white, g$gamma),
+                x = unit(x + pw / 2, "in"), y = unit(PH - y - ph - .16, "in"),
+                gp = gpar(fontsize = 7.2, col = "grey20"))
+    }
+    y <- y + ph + CAP
+  }
+
+  legend <- paste0(
+    "Uncropped source images for Figure 1D. Exposure ",
+    paste(sprintf("%.2f s (%s)", sapply(gel, `[[`, "expo"), names(gel)), collapse = ", "),
+    "; ", gel[[1]]$dim[2], " \u00d7 ", gel[[1]]$dim[1], " px, 12-bit. Left: complete gels, ",
+    "linear (black point 0, \u03b3 = 1, not inverted), same display parameters as the ",
+    "corresponding strips in Figure 1D; red outline marks the region shown there. Right: same ",
+    "data with the display transform stored in the .scn file (inverted), so that wells, gel edges ",
+    "and faint background are visible; this non-linear adjustment was applied globally and serves ",
+    "display only. Quantification used the unmodified 12-bit data. No pixel was saturated (maxima ",
+    paste(sapply(gel, `[[`, "max"), collapse = " / "), " of ", gel[[1]]$ceiling, ").")
+  grid.text(paste(strwrap(legend, 128), collapse = "\n"),
+            x = unit(M, "in"), y = unit(PH - y - .1, "in"),
+            just = c("left", "top"), gp = gpar(fontsize = 7.6, lineheight = 1.3))
+}
+```
+
+```{r suppl-gels-draw, fig.width = PW, fig.height = PH}
+draw_suppl_gels()
+```
+
+# Save figure
+
+`psave()` wraps `ggsave()` and cannot be used here: the page is an imperative `grid` drawing, not a `ggplot` object. The write is routed through `fpath` (defined by `Figure_settings.R` as `documents/figures`) so that nothing lands in the render directory. Output size is the page size used for the inline render above, so the saved PDF and the inline figure are the same layout.
+
+```{r}
+#| label: save-figure
+
+dir.create(fpath, showWarnings = FALSE, recursive = TRUE)
+
+cairo_pdf(file.path(fpath, "ratioPCR_figure_S4.pdf"), width = PW, height = PH,fallback_resolution = 1200)
+draw_suppl_gels()
+invisible(dev.off())
+
+file.path(fpath, "ratioPCR_figure_S4.pdf")
+```
